@@ -35,7 +35,7 @@ Download the installer for your system from [Releases](https://github.com/PiwPiy
 | macOS (Apple Silicon / Intel) | `BWA-<version>-mac-arm64.dmg` / `-mac-x64.dmg` | The app is unsigned. If macOS says it is damaged or cannot be opened, run `xattr -cr "/Applications/Build With Agent.app"` |
 | Linux | `BWA-<version>-linux-x86_64.AppImage` | `chmod +x BWA-*.AppImage`, then run it |
 
-The macOS and Linux builds are produced by CI and have not yet been tried on real machines. Reports are welcome.
+Every build is started on Windows, macOS, and Linux in CI to check that the app launches and serves its UI. The macOS and Linux builds have not yet been tried on personal machines, so reports are welcome.
 
 The app keeps running in the tray when you close its window, so agents can keep answering and ticking off tasks. Your projects and settings live in the app's data folder (Windows `%APPDATA%\Build With Agent\data`, macOS `~/Library/Application Support/Build With Agent/data`, Linux `~/.config/Build With Agent/data`).
 
@@ -116,7 +116,8 @@ Tests (each uses a throwaway server, data folder, and Claude Code/Codex config f
 
 ```bash
 node scripts/brain-smoke-test.mjs     # the MCP brain, end to end
-node scripts/connect-smoke-test.mjs   # one-click connect (needs Claude Code installed)
+node scripts/connect-smoke-test.mjs   # one-click connect (needs Claude Code installed; BWA_TEST_CODEX=1 also asks the real Codex CLI)
+node scripts/launch-test.mjs          # start the packaged desktop app from release/ and check it
 ```
 
 ## Optional: 9router

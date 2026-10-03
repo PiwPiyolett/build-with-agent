@@ -131,6 +131,21 @@ try {
   check(written.includes(`command = "${slash(bridge.command)}"`), "command menunjuk ke runtime bridge BWA");
   check(written.includes(`args = ["${slash(bridge.mcpServerPath)}"]`), "args menunjuk ke mcp-server.mjs BWA ini");
   check(written.includes(`BWA_URL = "${bridge.apiUrl}"`) && written.includes('BWA_AGENT_NAME = "codex"'), "env berisi BWA_URL dan BWA_AGENT_NAME");
+  // Optional, needs the network: the real Codex CLI must read the table BWA wrote.
+  if (process.env.BWA_TEST_CODEX === "1") {
+    let codexSays = "";
+    try {
+      codexSays = execFileSync("npx", ["-y", "@openai/codex", "mcp", "get", "bwa"], {
+        env: isolatedEnv,
+        encoding: "utf8",
+        shell: process.platform === "win32",
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+    } catch (err) {
+      codexSays = String(err?.stdout ?? err?.message ?? err);
+    }
+    check(/enabled: true/.test(codexSays) && codexSays.includes(slash(bridge.mcpServerPath)), "Codex CLI sungguhan membaca bwa: enabled, jalur bridge benar");
+  }
 
   // ---------- 6. a real-world config.toml: other settings stay, an old bwa table is replaced ----------
   const userConfig = [

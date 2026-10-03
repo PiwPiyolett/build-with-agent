@@ -33,7 +33,7 @@ Unduh installer untuk sistemmu dari [Releases](https://github.com/PiwPiyolett/bu
 | macOS (Apple Silicon / Intel) | `BWA-<versi>-mac-arm64.dmg` / `-mac-x64.dmg` | Aplikasi tidak bertanda tangan. Kalau macOS bilang aplikasinya rusak atau tidak bisa dibuka, jalankan `xattr -cr "/Applications/Build With Agent.app"` |
 | Linux | `BWA-<versi>-linux-x86_64.AppImage` | `chmod +x BWA-*.AppImage`, lalu jalankan |
 
-Build macOS dan Linux dibuat oleh CI dan belum dicoba di perangkat sungguhan. Laporan sangat diterima.
+Setiap build dinyalakan di Windows, macOS, dan Linux di CI untuk memastikan aplikasinya berjalan dan menyajikan UI. Build macOS dan Linux belum dicoba di perangkat pribadi, jadi laporan sangat diterima.
 
 Aplikasi tetap berjalan di tray saat jendelanya ditutup, supaya agent tetap bisa menjawab dan mencentang task. Proyek dan pengaturan tersimpan di folder data aplikasi (Windows `%APPDATA%\Build With Agent\data`, macOS `~/Library/Application Support/Build With Agent/data`, Linux `~/.config/Build With Agent/data`).
 
@@ -114,7 +114,8 @@ Tes (masing-masing memakai server, folder data, dan folder konfigurasi Claude Co
 
 ```bash
 node scripts/brain-smoke-test.mjs     # otak MCP dari ujung ke ujung
-node scripts/connect-smoke-test.mjs   # sambungkan satu klik (butuh Claude Code terpasang)
+node scripts/connect-smoke-test.mjs   # sambungkan satu klik (butuh Claude Code terpasang; BWA_TEST_CODEX=1 juga memeriksa lewat Codex CLI sungguhan)
+node scripts/launch-test.mjs          # menyalakan aplikasi desktop hasil build dari release/ lalu memeriksanya
 ```
 
 ## Opsional: 9router
