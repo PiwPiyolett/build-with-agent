@@ -1,0 +1,15 @@
+{
+  "name": "build-with-agent",
+  "description": "Build With Agent (BWA): plan an app idea into a feature topology and tasks that Claude Code builds.",
+  "owner": {
+    "name": "Ariqo Banyusila Abrar",
+    "url": "https://github.com/PiwPiyolett"
+  },
+  "plugins": [
+    {
+      "name": "bwa",
+      "source": "./plugins/bwa",
+      "description": "Connect Claude Code to BWA: /bwa:start makes this session BWA's AI brain, then its coding agent."
+    }
+  ]
+}

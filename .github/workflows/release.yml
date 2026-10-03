@@ -1,0 +1,80 @@
+# Builds the desktop installers on every version tag (v*) and attaches them to a draft GitHub Release.
+# The release stays a draft until it is published by hand, so nothing goes public by accident.
+name: Release installers
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+            target: --win nsis
+            files: release/*.exe
+          - name: macOS
+            os: macos-latest
+            target: --mac dmg
+            files: release/*.dmg
+          - name: Linux
+            os: ubuntu-latest
+            target: --linux AppImage
+            files: release/*.AppImage
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      # The MCP brain end to end (private server, throwaway data). Platform-independent, so once is enough.
+      - name: Brain smoke test
+        if: matrix.os == 'ubuntu-latest'
+        run: node scripts/brain-smoke-test.mjs
+
+      - run: npm run build
+
+      - run: node scripts/build-desktop.mjs
+
+      # Installers are unsigned: no code-signing certificate is configured.
+      - run: npx electron-builder ${{ matrix.target }} --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-${{ matrix.name }}
+          path: ${{ matrix.files }}
+          if-no-files-found: error
+
+  release:
+    name: Draft release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: installers
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: installers/*
+          generate_release_notes: true

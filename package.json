@@ -1,0 +1,141 @@
+{
+  "name": "bwa",
+  "productName": "Build With Agent",
+  "version": "0.3.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "description": "Build With Agent (BWA): turn a one-sentence idea into a feature topology and tasks that Claude Code or Codex build and tick off, with the agent itself as the AI brain over MCP.",
+  "author": "Ariqo Banyusila Abrar",
+  "homepage": "https://github.com/PiwPiyolett/build-with-agent",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PiwPiyolett/build-with-agent.git"
+  },
+  "bugs": {
+    "url": "https://github.com/PiwPiyolett/build-with-agent/issues"
+  },
+  "engines": {
+    "node": ">=22.6"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n api,web -c yellow,cyan \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:api": "tsx watch --clear-screen=false server/index.ts",
+    "dev:web": "vite",
+    "build": "vite build",
+    "start": "tsx server/index.ts",
+    "typecheck": "tsc --noEmit",
+    "mcp": "node bridge/mcp-server.mjs",
+    "icons": "node scripts/make-icons.mjs",
+    "desktop:bundle": "node scripts/build-desktop.mjs",
+    "desktop": "vite build && node scripts/build-desktop.mjs && electron .",
+    "desktop:dist": "node scripts/make-icons.mjs && vite build && node scripts/build-desktop.mjs && electron-builder --win nsis",
+    "bwa": "node bridge/cli.mjs",
+    "desktop:dist:mac": "node scripts/make-icons.mjs && vite build && node scripts/build-desktop.mjs && electron-builder --mac dmg",
+    "desktop:dist:linux": "node scripts/make-icons.mjs && vite build && node scripts/build-desktop.mjs && electron-builder --linux AppImage"
+  },
+  "devDependencies": {
+    "@dagrejs/dagre": "^3.1.1",
+    "@fontsource-variable/archivo": "^5.3.0",
+    "@fontsource-variable/atkinson-hyperlegible-next": "^5.3.0",
+    "@fontsource-variable/martian-mono": "^5.3.0",
+    "@hono/node-server": "^2.1.1",
+    "@modelcontextprotocol/sdk": "^1.31.0",
+    "@resvg/resvg-js": "^2.6.2",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^26.6.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "@xyflow/react": "^12.12.0",
+    "concurrently": "^10.0.5",
+    "electron": "^44.4.5",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.2",
+    "hono": "^4.13.10",
+    "lucide-react": "^1.48.0",
+    "mermaid": "^12.0.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1",
+    "zod": "^4.6.5"
+  },
+  "main": "dist-electron/main.mjs",
+  "build": {
+    "appId": "id.bwa.app",
+    "productName": "Build With Agent",
+    "copyright": "Copyright © 2026 Ariqo Banyusila Abrar",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "plugins/**/*",
+      "build/icon.png",
+      "build/tray.png",
+      "build/tray@2x.png",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "dist-electron/bridge/**"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "Build With Agent",
+      "artifactName": "BWA-Setup-${version}.${ext}"
+    },
+    "executableName": "BWA",
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "category": "public.app-category.developer-tools",
+      "identity": null
+    },
+    "dmg": {
+      "artifactName": "BWA-${version}-mac-${arch}.${ext}"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "category": "Development",
+      "artifactName": "BWA-${version}-linux-${arch}.${ext}"
+    }
+  }
+}
