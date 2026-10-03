@@ -30,7 +30,7 @@ Unduh installer untuk sistemmu dari [Releases](https://github.com/PiwPiyolett/bu
 | Sistem | File | Saat pertama dibuka |
 | --- | --- | --- |
 | Windows | `BWA-Setup-<versi>.exe` | SmartScreen bisa memperingatkan karena installer tidak bertanda tangan: **More info → Run anyway** |
-| macOS (Apple Silicon / Intel) | `BWA-<versi>-mac-arm64.dmg` / `-mac-x64.dmg` | Aplikasi tidak bertanda tangan. Kalau macOS bilang aplikasinya rusak atau tidak bisa dibuka, jalankan `xattr -cr "/Applications/Build With Agent.app"` |
+| macOS (Apple Silicon / Intel) | `BWA-<versi>-mac-arm64.dmg` / `-mac-x64.dmg` | Aplikasi tidak bertanda tangan. Kalau macOS bilang aplikasinya rusak atau tidak bisa dibuka, jalankan `xattr -cr /Applications/BWA.app` |
 | Linux | `BWA-<versi>-linux-x86_64.AppImage` | `chmod +x BWA-*.AppImage`, lalu jalankan |
 
 Setiap build dinyalakan di Windows, macOS, dan Linux di CI untuk memastikan aplikasinya berjalan dan menyajikan UI. Build macOS dan Linux belum dicoba di perangkat pribadi, jadi laporan sangat diterima.

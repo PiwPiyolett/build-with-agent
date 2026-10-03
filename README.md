@@ -32,7 +32,7 @@ Download the installer for your system from [Releases](https://github.com/PiwPiy
 | System | File | First launch |
 | --- | --- | --- |
 | Windows | `BWA-Setup-<version>.exe` | SmartScreen may warn because the installer is unsigned: **More info → Run anyway** |
-| macOS (Apple Silicon / Intel) | `BWA-<version>-mac-arm64.dmg` / `-mac-x64.dmg` | The app is unsigned. If macOS says it is damaged or cannot be opened, run `xattr -cr "/Applications/Build With Agent.app"` |
+| macOS (Apple Silicon / Intel) | `BWA-<version>-mac-arm64.dmg` / `-mac-x64.dmg` | The app is unsigned. If macOS says it is damaged or cannot be opened, run `xattr -cr /Applications/BWA.app` |
 | Linux | `BWA-<version>-linux-x86_64.AppImage` | `chmod +x BWA-*.AppImage`, then run it |
 
 Every build is started on Windows, macOS, and Linux in CI to check that the app launches and serves its UI. The macOS and Linux builds have not yet been tried on personal machines, so reports are welcome.
