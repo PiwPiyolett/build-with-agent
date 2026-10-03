@@ -19,15 +19,15 @@ jobs:
         include:
           - name: Windows
             os: windows-latest
-            target: --win nsis
+            target: --win
             files: release/*.exe
           - name: macOS
             os: macos-latest
-            target: --mac dmg
+            target: --mac
             files: release/*.dmg
           - name: Linux
             os: ubuntu-latest
-            target: --linux AppImage
+            target: --linux
             files: release/*.AppImage
     runs-on: ${{ matrix.os }}
     steps:
@@ -51,7 +51,8 @@ jobs:
 
       - run: node scripts/build-desktop.mjs
 
-      # Installers are unsigned: no code-signing certificate is configured.
+      # Targets and architectures come from package.json ("build"). Naming a target here (e.g. --mac dmg)
+      # would build only the runner's own architecture. Installers are unsigned: no certificate is configured.
       - run: npx electron-builder ${{ matrix.target }} --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
