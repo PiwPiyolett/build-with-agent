@@ -79,14 +79,16 @@ export interface BridgeInfo {
   nodePath: string;
 }
 
-/** Set once at startup from /api/health: true inside the desktop app. */
-export const runtime = { desktop: false };
+/** Set once at startup from /api/health: the desktop app or the web version, and the computer it runs on. */
+export const runtime = { desktop: false, platform: "win32", arch: "x64" };
 
 export async function detectRuntime() {
   try {
     const res = await fetch("/api/health");
-    const data = (await res.json()) as { desktop?: boolean };
+    const data = (await res.json()) as { desktop?: boolean; platform?: string; arch?: string };
     runtime.desktop = data.desktop === true;
+    if (data.platform) runtime.platform = data.platform;
+    if (data.arch) runtime.arch = data.arch;
   } catch {
     /* keep web defaults */
   }

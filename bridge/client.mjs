@@ -5,14 +5,15 @@ export const BWA_URL = (process.env.BWA_URL || "http://127.0.0.1:3900").replace(
 
 export class BwaError extends Error {}
 
-export async function call(method, path, body, agent = "agent", timeoutMs = 20_000) {
+export async function call(method, path, body, agent = "agent", timeoutMs = 20_000, signal) {
+  const timeout = AbortSignal.timeout(timeoutMs);
   let res;
   try {
     res = await fetch(`${BWA_URL}/api/agent${path}`, {
       method,
       headers: { "Content-Type": "application/json", "x-bwa-client": `agent:${agent}` },
       body: body === undefined ? undefined : JSON.stringify(body),
-      signal: AbortSignal.timeout(timeoutMs),
+      signal: signal ? AbortSignal.any([timeout, signal]) : timeout,
     });
   } catch (err) {
     throw new BwaError(

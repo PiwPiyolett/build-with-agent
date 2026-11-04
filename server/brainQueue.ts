@@ -6,21 +6,23 @@
 // Everything lives in memory: a restart drops queued jobs and the waiting run fails with a clear message.
 
 import { randomBytes } from "node:crypto";
+import { agentLabel } from "../shared/setupGuide.ts";
 import type { AgentKey, BrainWorker } from "../shared/types.ts";
 import { LlmError, type ChatOptions, type ChatResult } from "./llm.ts";
 import { HttpError } from "./util.ts";
 
-/** A worker that polled within this window counts as standby: one long-poll plus the agent's own turn overhead. */
-const ONLINE_MS = 90_000;
+/** A worker that polled within this window counts as standby: the time between two polls. Tests shorten it. */
+const ONLINE_MS = Number(process.env.BWA_BRAIN_ONLINE_MS) || 90_000;
 /** How long a queued job waits when no agent is standby at all, before the run fails with instructions. */
 const NO_WORKER_GRACE_MS = 45_000;
 /** A handover nobody picked up is stale after this; it must not surprise a brain session opened much later. */
 const HANDOVER_TTL_MS = 10 * 60_000;
 /**
- * Upper bound for one long-poll. MCP clients give up on a tool call after about 60 seconds
- * (the MCP SDK default, and Codex's tool_timeout_sec), so the server must answer well before that.
+ * Upper bound for one long-poll. Each empty answer costs the user a model turn, so longer is cheaper, but it must stay
+ * inside what clients allow: Claude Code moves an MCP call to the background after two minutes, and Codex gives up after
+ * its tool_timeout_sec, which BWA raises when it connects Codex. Clients connected by hand keep a shorter wait of their own.
  */
-export const MAX_WAIT_SEC = 50;
+export const MAX_WAIT_SEC = 110;
 
 const ROLE: Record<AgentKey, string> = {
   idea: "Agent 1 · Idea Developer",
@@ -72,8 +74,10 @@ export function standbyWorkers(): BrainWorker[] {
   const now = Date.now();
   const busy = new Map<string, number>();
   for (const job of claimed.values()) if (job.claimedBy) busy.set(job.claimedBy, (busy.get(job.claimedBy) ?? 0) + 1);
+  // A worker blocked in a long poll has said nothing for a while, but it is still there.
+  const waiting = new Set(waiters.map((w) => w.worker));
   return [...lastSeen.entries()]
-    .filter(([name, at]) => busy.has(name) || now - at < ONLINE_MS)
+    .filter(([name, at]) => busy.has(name) || waiting.has(name) || now - at < ONLINE_MS)
     .sort((a, b) => b[1] - a[1])
     .map(([name, at]) => ({ name, lastSeen: new Date(at).toISOString(), busy: busy.get(name) ?? 0 }));
 }
@@ -174,11 +178,7 @@ export function submitJob(worker: string, jobId: string, output: string) {
 
 export function failJob(worker: string, jobId: string, reason: string) {
   findClaimed(worker, jobId).settle(
-    new LlmError(
-      `Agent MCP (${worker}) tidak bisa menjawab: ${reason || "tanpa alasan"}`,
-      "brain_failed",
-      "Jalankan lagi, atau ganti ke 9router di Pengaturan.",
-    ),
+    new LlmError(`${agentLabel(worker)} tidak bisa menjawab: ${reason || "tanpa alasan"}`, "brain_failed", "Coba jalankan lagi."),
   );
 }
 
@@ -200,9 +200,8 @@ export function queueHandover(projectId: string, markdown: string, onDelivered: 
   else handovers.push(h);
 }
 
-const START_HINT =
-  "Buka Claude Code atau Codex yang sudah terhubung ke MCP server bwa, lalu jalankan prompt jadi_otak " +
-  "(Claude Code: /mcp__bwa__jadi_otak). Biarkan sesinya tetap terbuka. Atau ganti ke 9router di Pengaturan.";
+export const CONNECT_HINT =
+  'Klik "Hubungkan asisten AI" lalu ikuti langkahnya. Kalau sudah pernah, cukup buka percakapan baru dan ketik /bwa (Claude) atau $bwa (Codex).';
 
 /** chat() for provider "mcp": queues the prompt and resolves when a standby agent answers it. */
 export function chatViaBrain(opts: ChatOptions, timeoutSec: number): Promise<ChatResult> {
@@ -220,15 +219,15 @@ export function chatViaBrain(opts: ChatOptions, timeoutSec: number): Promise<Cha
       user: opts.user,
       claimedBy: null,
       onClaim: (worker) => {
-        opts.onStatus?.(`${worker} mengambil job ${job.id} dan sedang berpikir…`);
+        opts.onStatus?.(`${agentLabel(worker)} sedang mengerjakan permintaanmu…`);
         // Time spent queued behind other jobs does not count: the limit applies to answering.
         thinking = setTimeout(
           () =>
             job.settle(
               new LlmError(
-                `${worker} tidak mengirim jawaban dalam ${timeoutSec} detik.`,
+                `${agentLabel(worker)} belum mengirim jawaban setelah ${timeoutSec} detik.`,
                 "brain_timeout",
-                "Pastikan sesi agent masih berjalan, atau naikkan Timeout di Pengaturan.",
+                "Pastikan percakapannya masih terbuka, lalu coba lagi. Kalau sering terjadi, naikkan Timeout di Pengaturan.",
               ),
             ),
           timeoutSec * 1000,
@@ -257,7 +256,7 @@ export function chatViaBrain(opts: ChatOptions, timeoutSec: number): Promise<Cha
       }
       lonelySince ??= Date.now();
       if (Date.now() - lonelySince >= NO_WORKER_GRACE_MS) {
-        job.settle(new LlmError("Tidak ada agent MCP yang standby untuk menjawab.", "no_worker", START_HINT));
+        job.settle(new LlmError("Asisten AI belum terhubung.", "no_worker", CONNECT_HINT));
       }
     }, 2_000);
     const onAbort = () => job.settle(new LlmError("Dibatalkan.", "aborted"));
@@ -266,8 +265,8 @@ export function chatViaBrain(opts: ChatOptions, timeoutSec: number): Promise<Cha
     const standby = standbyWorkers();
     opts.onStatus?.(
       standby.length
-        ? `Job ${job.id} masuk antrean · standby: ${standby.map((w) => w.name).join(", ")}`
-        : `Job ${job.id} menunggu agent MCP. Jalankan /mcp__bwa__jadi_otak di Claude Code (atau prompt jadi_otak di Codex).`,
+        ? `Permintaan dikirim ke ${standby.map((w) => agentLabel(w.name)).join(", ")}.`
+        : "Menunggu asisten AI. Buka percakapan baru dan ketik /bwa (Claude) atau $bwa (Codex).",
     );
 
     const waiter = waiters.shift();

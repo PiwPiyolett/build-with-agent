@@ -24,12 +24,17 @@ const isFile = (p: string) => {
 function run(exe: string, args: string[], timeoutMs = 60_000): Promise<{ ok: boolean; out: string }> {
   const shim = /\.(cmd|bat)$/i.test(exe);
   return new Promise((resolve) => {
-    execFile(
-      shim ? `"${exe}"` : exe,
-      shim ? args.map((a) => `"${a}"`) : args,
-      { timeout: timeoutMs, windowsHide: true, shell: shim, encoding: "utf8" },
-      (err, stdout, stderr) => resolve({ ok: !err, out: `${stdout}${stderr}` }),
-    );
+    try {
+      execFile(
+        shim ? `"${exe}"` : exe,
+        shim ? args.map((a) => `"${a}"`) : args,
+        { timeout: timeoutMs, windowsHide: true, shell: shim, encoding: "utf8" },
+        (err, stdout, stderr) => resolve({ ok: !err, out: `${stdout}${stderr}` }),
+      );
+    } catch (err) {
+      // A damaged or half-downloaded executable can throw here instead of reporting through the callback.
+      resolve({ ok: false, out: (err as Error).message });
+    }
   });
 }
 
@@ -37,6 +42,33 @@ function run(exe: string, args: string[], timeoutMs = 60_000): Promise<{ ok: boo
 
 /** Newest first, by numeric version folder name (2.1.286 before 2.1.40). */
 const newestFirst = (names: string[]) => [...names].sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+
+const appData = () => process.env.APPDATA ?? path.join(home, "AppData", "Roaming");
+/** The Microsoft Store build of the desktop app keeps its data per package under %LOCALAPPDATA%\Claude-Data. */
+const storeData = () => path.join(process.env.LOCALAPPDATA ?? path.join(home, "AppData", "Local"), "Claude-Data");
+const subfolders = (dir: string) => {
+  try {
+    return fs.readdirSync(dir);
+  } catch {
+    return [];
+  }
+};
+
+/** Where the Claude desktop app keeps its copy of Claude Code. */
+function desktopRoots(): string[] {
+  if (process.platform === "win32") {
+    return [path.join(appData(), "Claude", "claude-code"), ...subfolders(storeData()).map((pkg) => path.join(storeData(), pkg, "claude-code"))];
+  }
+  if (process.platform === "darwin") return [path.join(home, "Library", "Application Support", "Claude", "claude-code")];
+  return [path.join(home, ".config", "Claude", "claude-code")];
+}
+
+/** The desktop app can be installed before its copy of Claude Code exists, which arrives once the Code tab is used. */
+function claudeAppFound(): boolean {
+  if (process.platform === "win32") return subfolders(storeData()).length > 0 || fs.existsSync(path.join(appData(), "Claude"));
+  if (process.platform === "darwin") return ["/Applications/Claude.app", path.join(home, "Applications", "Claude.app")].some((p) => fs.existsSync(p));
+  return fs.existsSync(path.join(home, ".config", "Claude"));
+}
 
 /** The claude CLI: an explicit override, PATH, then the copy bundled with the Claude desktop app. */
 export function findClaude(): string | null {
@@ -49,11 +81,7 @@ export function findClaude(): string | null {
   }
 
   const exe = process.platform === "win32" ? "claude.exe" : "claude";
-  const desktopRoots = {
-    win32: [path.join(process.env.APPDATA ?? path.join(home, "AppData", "Roaming"), "Claude", "claude-code")],
-    darwin: [path.join(home, "Library", "Application Support", "Claude", "claude-code")],
-  }[process.platform as "win32" | "darwin"] ?? [path.join(home, ".config", "Claude", "claude-code")];
-  for (const root of desktopRoots) {
+  for (const root of desktopRoots()) {
     let versions: string[] = [];
     try {
       versions = newestFirst(fs.readdirSync(root));
@@ -94,8 +122,21 @@ function skillCurrent(): boolean {
   }
 }
 
+/**
+ * How long one wait_for_brain_job call blocks. Every call that comes back empty costs the user a model turn, so
+ * longer is cheaper. Claude Code moves an MCP call still running after two minutes to the background, which would
+ * break the loop, so this stays well under that. MAX_WAIT_SEC in brainQueue.ts must allow it.
+ */
+const BRAIN_WAIT_SEC = 100;
+
 function bridgeEnv(bridge: BridgeInfo): Record<string, string> {
-  return { ...bridge.commandEnv, BWA_URL: bridge.apiUrl };
+  return { ...bridge.commandEnv, BWA_URL: bridge.apiUrl, BWA_WAIT_SEC: String(BRAIN_WAIT_SEC) };
+}
+
+/** Only ever deletes BWA's own skills/bwa folder. */
+function removeSkillFolder(target: string) {
+  const dir = path.dirname(target);
+  if (path.basename(dir) === "bwa" && path.basename(path.dirname(dir)) === "skills") fs.rmSync(dir, { recursive: true, force: true });
 }
 
 /** `claude mcp add` arguments. The name precedes --env: that option is variadic and would swallow it. */
@@ -106,26 +147,45 @@ function claudeAddArgs(bridge: BridgeInfo): string[] {
 
 const display = (args: string[]) => `claude ${args.map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(" ")}`;
 
+/** A terminal install's login. Only a JSON answer counts: an older CLI without this command also fails, which says nothing. */
+async function claudeSignedIn(exe: string): Promise<boolean | null> {
+  const got = await run(exe, ["auth", "status"], 15_000);
+  try {
+    JSON.parse(/\{[\s\S]*\}/.exec(got.out)?.[0] ?? "");
+    return got.ok;
+  } catch {
+    return null;
+  }
+}
+
 export async function claudeStatus(bridge: BridgeInfo): Promise<AgentConnection> {
   const exe = findClaude();
   const changes = [`Menjalankan: ${display(claudeAddArgs(bridge))}`, `Memasang perintah /bwa di ${skillTarget()}`];
   if (!exe) {
+    const appFound = claudeAppFound();
     return {
       agent: "claude",
       found: false,
+      appFound,
       state: "disconnected",
       detail: "",
       changes,
-      message: "Claude Code tidak ditemukan. Pasang Claude Code (CLI atau aplikasi desktop Claude), lalu periksa lagi.",
+      message: appFound
+        ? "Aplikasi Claude sudah terpasang. Buka aplikasinya, masuk ke akunmu, lalu buka tab Code sekali."
+        : "Claude belum terpasang di komputer ini.",
     };
   }
-  const got = await run(exe, ["mcp", "get", "bwa"]);
+  const via = desktopRoots().some((root) => exe.startsWith(root + path.sep)) ? "app" : "cli";
+  const [got, signedIn] = await Promise.all([run(exe, ["mcp", "get", "bwa"]), via === "app" ? null : claudeSignedIn(exe)]);
   // Registered for this BWA only if the entry runs this install's bridge (paths compared loosely: slashes, case).
   const norm = (s: string) => s.replace(/\\/g, "/").toLowerCase();
-  const ours = norm(got.out).includes(norm(bridge.mcpServerPath)) && norm(got.out).includes(norm(bridge.command));
+  const ours = [bridge.mcpServerPath, bridge.command, `BWA_WAIT_SEC=${BRAIN_WAIT_SEC}`].every((part) => norm(got.out).includes(norm(part)));
   return {
     agent: "claude",
     found: true,
+    appFound: via === "app" || claudeAppFound(),
+    via,
+    signedIn,
     state: !got.ok ? "disconnected" : ours ? "connected" : "outdated",
     detail: exe,
     skill: skillCurrent(),
@@ -136,7 +196,7 @@ export async function claudeStatus(bridge: BridgeInfo): Promise<AgentConnection>
 /** Registers bwa at user scope (every folder) and installs /bwa. Idempotent: an existing entry is replaced. */
 export async function connectClaude(bridge: BridgeInfo): Promise<AgentConnection> {
   const exe = findClaude();
-  if (!exe) throw new HttpError(404, "Claude Code tidak ditemukan di komputer ini.", "Pasang Claude Code (CLI atau aplikasi desktop Claude), lalu coba lagi.");
+  if (!exe) throw new HttpError(404, "Claude belum ditemukan di komputer ini.", "Pasang aplikasi Claude, masuk ke akunmu, buka tab Code sekali, lalu coba lagi.");
   // `mcp add` refuses an existing name, so a stale entry from another install is removed first.
   await run(exe, ["mcp", "remove", "bwa", "--scope", "user"]);
   const added = await run(exe, claudeAddArgs(bridge));
@@ -150,9 +210,7 @@ export async function connectClaude(bridge: BridgeInfo): Promise<AgentConnection
 export async function disconnectClaude(bridge: BridgeInfo): Promise<AgentConnection> {
   const exe = findClaude();
   if (exe) await run(exe, ["mcp", "remove", "bwa", "--scope", "user"]);
-  const dir = path.dirname(skillTarget());
-  // Guard: only ever delete BWA's own skills/bwa folder.
-  if (path.basename(dir) === "bwa" && path.basename(path.dirname(dir)) === "skills") fs.rmSync(dir, { recursive: true, force: true });
+  removeSkillFolder(skillTarget());
   return claudeStatus(bridge);
 }
 
@@ -164,6 +222,18 @@ const toPosix = (p: string) => p.replace(/\\/g, "/");
 /** TOML basic strings share JSON's escapes for the values written here (paths, URLs). */
 const tomlString = (s: string) => JSON.stringify(s);
 
+/** The short $bwa command. Codex reads personal skills from ~/.agents/skills, in both the app and the CLI. */
+export const codexSkillTarget = () => path.join(home, ".agents", "skills", "bwa", "SKILL.md");
+const codexSkill = () => fs.readFileSync(path.join(ROOT_DIR, "plugins", "bwa", "codex", "SKILL.md"), "utf8");
+
+function codexSkillCurrent(): boolean {
+  try {
+    return fs.readFileSync(codexSkillTarget(), "utf8") === codexSkill();
+  } catch {
+    return false;
+  }
+}
+
 function codexBlock(bridge: BridgeInfo): string {
   const env = { ...bridgeEnv(bridge), BWA_AGENT_NAME: "codex" };
   return [
@@ -173,6 +243,10 @@ function codexBlock(bridge: BridgeInfo): string {
     `env = { ${Object.entries(env)
       .map(([k, v]) => `${k} = ${tomlString(v)}`)
       .join(", ")} }`,
+    // Codex gives up on a tool call after 60 seconds unless told otherwise, and that must outlast the wait.
+    `tool_timeout_sec = ${BRAIN_WAIT_SEC + 30}`,
+    // Waiting for BWA's next request calls these tools again and again, so a prompt each time would be unusable.
+    'default_tools_approval_mode = "approve"',
   ].join("\n");
 }
 
@@ -203,13 +277,21 @@ export function codexStatus(bridge: BridgeInfo): AgentConnection {
     /* no config yet */
   }
   const { bwa } = splitBwaTable(text);
-  const ours = bwa.includes(tomlString(toPosix(bridge.mcpServerPath)));
+  const cli = onPath("codex");
+  const found = cli || fs.existsSync(codexHome());
   return {
     agent: "codex",
-    found: onPath("codex") || fs.existsSync(codexHome()),
-    state: !bwa.trim() ? "disconnected" : ours ? "connected" : "outdated",
+    found,
+    via: !found ? undefined : cli ? "cli" : "app",
+    // The ChatGPT app has no way to ask from outside, and the CLI's non-logged-in answer is not documented.
+    signedIn: null,
+    state: !bwa.trim() ? "disconnected" : bwa.trim() === codexBlock(bridge) ? "connected" : "outdated",
     detail: file,
-    changes: [`Menulis bagian [mcp_servers.bwa] di ${file} (salinan sebelumnya disimpan sebagai config.toml.bak-bwa)`],
+    skill: codexSkillCurrent(),
+    changes: [
+      `Menulis bagian [mcp_servers.bwa] di ${file} (salinan sebelumnya disimpan sebagai config.toml.bak-bwa)`,
+      `Memasang perintah $bwa di ${codexSkillTarget()}`,
+    ],
   };
 }
 
@@ -223,10 +305,13 @@ function rewriteCodexConfig(bwaTable: string) {
 
 export function connectCodex(bridge: BridgeInfo): AgentConnection {
   rewriteCodexConfig(codexBlock(bridge));
+  fs.mkdirSync(path.dirname(codexSkillTarget()), { recursive: true });
+  fs.writeFileSync(codexSkillTarget(), codexSkill());
   return codexStatus(bridge);
 }
 
 export function disconnectCodex(bridge: BridgeInfo): AgentConnection {
   if (fs.existsSync(codexConfig())) rewriteCodexConfig("");
+  removeSkillFolder(codexSkillTarget());
   return codexStatus(bridge);
 }

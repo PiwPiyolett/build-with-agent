@@ -490,7 +490,7 @@ function TopologyEditor({ project, setProject, runner, remote }: Props) {
           proOptions={{ hideAttribution: true }}
           connectionLineStyle={{ stroke: "#d9632a", strokeWidth: 2, strokeDasharray: "5 4" }}
         >
-          <Background variant={BackgroundVariant.Dots} gap={22} size={1.4} color="#c1c9c5" />
+          <Background variant={BackgroundVariant.Dots} gap={22} size={1.4} color="#d4d4d9" />
           <Controls position="bottom-right" orientation="horizontal" showInteractive={false} />
           <MiniMap
             position="bottom-right"
@@ -499,7 +499,7 @@ function TopologyEditor({ project, setProject, runner, remote }: Props) {
             zoomable
             nodeColor={(n) => KIND_HEX[(n as FeatureRFNode).data.node.kind]}
             nodeBorderRadius={4}
-            maskColor="#eef1efb3"
+            maskColor="#ffffffb3"
             className="max-md:!hidden"
           />
         </ReactFlow>

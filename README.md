@@ -2,7 +2,7 @@
 
 **English** · [Bahasa Indonesia](README.id.md)
 
-From a one-sentence idea to tasks that a coding agent builds and ticks off, or to a PRD you can share.
+From a one-sentence idea to tasks that a coding agent builds and ticks off, or to a PRD you can share. This build is themed for SMK Telkom Purwokerto.
 
 BWA runs three AI agents. Their brain is the coding agent you already use, **Claude Code or Codex**, connected over MCP and running on its own subscription or model, so you need no API key.
 
@@ -43,12 +43,12 @@ The app keeps running in the tray when you close its window, so agents can keep 
 
 ### Option A: one click in BWA (recommended)
 
-Open **Settings** (the status light, top right) → **Sambungkan agent**, then click **Sambungkan** (Connect) on Claude Code and/or Codex. BWA first shows exactly what it will change:
+The first time you open BWA, it shows the **Hubungkan asisten AI** (Connect your AI assistant) guide. You can reopen it from **Bantuan** (Help) or **Pengaturan** (Settings, top right). Follow its four steps: install the Claude or ChatGPT app, sign in, click **Hubungkan** (Connect), then start a new conversation. Steps BWA can check tick themselves off. Before changing anything, BWA shows exactly what it will change:
 
-- **Claude Code**: runs `claude mcp add bwa --scope user …` and installs the `/bwa` command. BWA also finds the `claude` that ships with the Claude desktop app, even when it is not on your PATH.
-- **Codex**: writes a `[mcp_servers.bwa]` table into `~/.codex/config.toml`. The rest of the file is untouched, and the previous version is saved as `config.toml.bak-bwa`.
+- **Claude Code**: runs `claude mcp add bwa --scope user …` and installs the `/bwa` command. BWA also finds the `claude` that ships with the Claude desktop app, including the Microsoft Store build, even when it is not on your PATH.
+- **Codex**: writes a `[mcp_servers.bwa]` table into `~/.codex/config.toml` and installs the `$bwa` command in `~/.agents/skills/bwa`. The rest of the file is untouched, and the previous version is saved as `config.toml.bak-bwa`.
 
-If you move or reinstall BWA, the card turns yellow ("menunjuk ke lokasi BWA lain") and **Perbarui** (Update) fixes it. **Hapus koneksi** (Remove connection) unregisters BWA from that agent. It is not how you stop brain mode: for that, press Esc in the agent session. The manual commands are under **Cara manual** below the cards.
+If you move, reinstall, or update BWA, the card turns yellow ("sambungan perlu diperbarui") and **Perbarui** (Update) fixes it. **Putuskan** (Disconnect) unregisters BWA from that agent. It is not how you stop the assistant: for that, press Esc or close the conversation. The manual commands are in the manual section below the cards.
 
 ### Option B: Claude Code plugin
 
@@ -64,8 +64,8 @@ The plugin adds `/bwa:start`. With BWA running, it registers the `bwa` MCP serve
 ## Use it
 
 1. Open a **new** agent session in **your project's repository folder** (where the code will be written).
-2. Claude Code: type `/bwa` (or `/bwa:start` from the plugin). Codex: send the "jadi otak" prompt from BWA's settings.
-3. The light in BWA turns green ("Agent MCP · claude-code"). Work through Idea and Topology in BWA; keep the session open.
+2. Claude Code: type `/bwa` (or `/bwa:start` from the plugin). Codex: type `$bwa`.
+3. The light in BWA turns green ("Asisten AI siap · Claude"). Work through Idea and Topology in BWA; keep the session open. Close it when you finish, because even waiting uses a little of your plan.
 4. Choose what happens after the tasks are split, in **Mau diapakan idenya?** (above "Bagi jadi task") or in Settings:
 
 | Mode | What the session does |
@@ -83,7 +83,7 @@ Good to know:
 - The agent's own model decides quality and speed. To switch models midway (for example Sonnet for ideas, Opus for topology and tasks): press Esc, run `/model`, then type `/bwa` or "continue". Jobs sent in the meantime wait in the queue for about two minutes.
 - In brain mode the session never touches your files. Code is written only after the handover.
 
-How it works: when you run an agent in the UI, BWA queues its prompt. The standby session long-polls `wait_for_brain_job` (about 40 seconds per call), answers exactly as the job instructs, and returns it with `submit_brain_result`. BWA turns the answer into ideas, a topology, or tasks.
+How it works: when you run an agent in the UI, BWA queues its prompt. The standby session long-polls `wait_for_brain_job` (about 100 seconds per call when connected through BWA, 40 when connected by hand), answers exactly as the job instructs, and returns it with `submit_brain_result`. BWA turns the answer into ideas, a topology, or tasks. Every empty answer costs one model turn, so a longer wait uses less of your plan.
 
 ## PRD path
 
@@ -117,6 +117,8 @@ Tests (each uses a throwaway server, data folder, and Claude Code/Codex config f
 ```bash
 node scripts/brain-smoke-test.mjs     # the MCP brain, end to end
 node scripts/connect-smoke-test.mjs   # one-click connect (needs Claude Code installed; BWA_TEST_CODEX=1 also asks the real Codex CLI)
+node --import tsx scripts/setup-guide-test.mjs   # the step logic of the connect guide
+node --import tsx scripts/ui-logic-test.mjs      # page addresses, progress on Riwayat, where the red glow drifts
 node scripts/launch-test.mjs          # start the packaged desktop app from release/ and check it
 ```
 
@@ -133,11 +135,13 @@ server/llm.ts          the brain's entry point: chat() → server/brainQueue.ts 
 server/brainQueue.ts   job queue for the MCP brain (long-poll, timeouts, standby status, handover)
 server/connect.ts      one-click connect for Claude Code and Codex
 bridge/                MCP server (stdio) and CLI for coding agents
-plugins/bwa/           Claude Code plugin (/bwa:start); also installed as /bwa by the Connect button
+plugins/bwa/           Claude Code plugin (/bwa:start); also installed as /bwa by the Connect button, and codex/ as $bwa
 .claude-plugin/        plugin marketplace for this repository
 electron/main.ts       desktop app: in-process server, window, tray
 shared/types.ts        shared data model
-src/                   React UI: home, Idea, Topology, Tasks, PRD
+shared/setupGuide.ts   step logic of the connect guide; its wording is in src/lib/setupGuide.ts
+src/                   React UI: home, Riwayat (projects), Bantuan (help), Idea, Topology, Tasks, PRD
+src/lib/brand.ts       the school's name, logo, picture, and quotes; the files are in public/brand/
 scripts/               desktop build, icons, tests
 ```
 
@@ -150,3 +154,5 @@ scripts/               desktop build, icons, tests
 ## License
 
 [MIT](LICENSE) © Ariqo Banyusila Abrar
+
+The MIT license covers the code. The Telkom Schools logo and the picture of the school in `public/brand/` belong to their owners and are not covered by it.

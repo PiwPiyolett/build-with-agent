@@ -37,9 +37,9 @@ function agentName() {
 }
 
 function tool(name, config, handler) {
-  server.registerTool(name, config, async (args) => {
+  server.registerTool(name, config, async (args, extra) => {
     try {
-      return { content: [{ type: "text", text: await handler(args ?? {}) }] };
+      return { content: [{ type: "text", text: await handler(args ?? {}, extra) }] };
     } catch (err) {
       return { content: [{ type: "text", text: `Error: ${err?.message ?? err}` }], isError: true };
     }
@@ -281,16 +281,18 @@ tool(
         .number()
         .int()
         .min(1)
-        .max(50)
+        .max(110)
         .optional()
-        .describe("How long to wait for a job. Default 40; keep it under your client's tool timeout."),
+        .describe("How long to wait for a job. Leave it out to use the wait BWA set up for this client; keep it under your client's tool timeout."),
     },
     annotations: { readOnlyHint: true },
   },
-  async ({ wait_seconds }) => {
-    const waitSec = wait_seconds ?? 40;
+  async ({ wait_seconds }, extra) => {
+    // BWA_WAIT_SEC is set when BWA connects the client itself. A client connected by hand may have a 60-second limit.
+    const waitSec = wait_seconds ?? (Number(process.env.BWA_WAIT_SEC) || 40);
     const agent = agentName();
-    return (await call("POST", "/brain/wait", { agent, waitSec }, agent, (waitSec + 15) * 1000)).markdown;
+    // Passing the signal on means a cancelled call stops waiting at once, so BWA never hands a job to a caller that left.
+    return (await call("POST", "/brain/wait", { agent, waitSec }, agent, (waitSec + 15) * 1000, extra.signal)).markdown;
   },
 );
 

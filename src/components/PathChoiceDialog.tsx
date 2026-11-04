@@ -43,8 +43,8 @@ export function PathChoiceDialog({ open, project, busy, onClose, onBuildTasks, o
           <div className="eyebrow mt-4">Dikerjakan AI</div>
           <h3 className="display mt-1 text-[21px] leading-tight text-ink">Kerjakan langsung dengan agent coding</h3>
           <p className="mt-2 text-[14px] leading-relaxed text-ink-2">
-            Agent 3 membagi fitur jadi task berurutan. Claude Code, Codex, atau agent lain terhubung ke BWA lewat MCP,
-            mengerjakan task di repository-mu, lalu mencentangnya di sini.
+            Agent 3 membagi fitur jadi task berurutan. Claude, Codex, atau asisten lain yang terhubung ke BWA mengerjakan
+            task di folder proyekmu, lalu mencentangnya di sini.
           </p>
           <ul className="mt-3 space-y-1.5 text-[13.5px] text-ink-2">
             {["Backlog task lengkap dengan kriteria selesai", "Progres terlihat langsung saat agent bekerja", "Cocok kalau mau dibangun sekarang"].map((x) => (
@@ -151,8 +151,8 @@ function HandoverChoice() {
 
   return (
     <div className="mb-4 space-y-1.5 rounded-lg bg-wash px-3 py-2.5">
-      <div className="text-[12.5px] font-semibold text-ink-2">Setelah task jadi, sesi Claude Code / Codex:</div>
-      <Segmented<HandoverMode> label="Mode serah-terima" value={mode} onChange={change} options={HANDOVER_OPTIONS} />
+      <div className="text-[12.5px] font-semibold text-ink-2">Setelah task jadi, asisten AI:</div>
+      <Segmented<HandoverMode> label="Yang dilakukan asisten setelah task jadi" value={mode} onChange={change} options={HANDOVER_OPTIONS} />
       <p className="text-[12px] leading-snug text-steel">{HANDOVER_HINT[mode]}</p>
     </div>
   );

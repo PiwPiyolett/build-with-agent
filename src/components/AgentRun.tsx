@@ -116,8 +116,8 @@ export function AgentRunOverlay({ runner }: { runner: AgentRunner }) {
   const waitedLong = Date.now() - state.stepStartedAt > 25_000;
 
   return (
-    <div className="fixed inset-0 z-40 grid place-items-center bg-paper/75 p-4 backdrop-blur-[2px]">
-      <div className="card rise-in w-full max-w-[460px] p-5 shadow-2xl" role="status" aria-live="polite">
+    <div className="modal-backdrop fixed inset-0 z-40 grid place-items-center bg-paper/75 p-4 backdrop-blur-[2px]">
+      <div className="modal-panel card w-full max-w-[460px] p-5 shadow-2xl" role="status" aria-live="polite">
         <div className="flex items-center justify-between">
           <span className="eyebrow">{state.error ? "Agent berhenti" : "Agent sedang bekerja"}</span>
           <span className="mono text-[11px] text-steel">{elapsed(Date.now() - state.startedAt)}</span>
@@ -146,7 +146,7 @@ export function AgentRunOverlay({ runner }: { runner: AgentRunner }) {
               <div className="cable flex-1">
                 <i />
               </div>
-              <span className="mono text-[10px] font-semibold tracking-wider text-ink-2">{mcp ? "AGENT MCP" : "9ROUTER"}</span>
+              <span className="mono text-[10px] font-semibold tracking-wider text-ink-2">{mcp ? "ASISTEN AI" : "9ROUTER"}</span>
             </div>
             <div className="mono mt-3 text-[11px] text-steel">
               {state.chars > 0
@@ -154,13 +154,13 @@ export function AgentRunOverlay({ runner }: { runner: AgentRunner }) {
                 : state.reasoning > 0
                   ? `model sedang berpikir · ${nf.format(state.reasoning)} karakter penalaran`
                   : mcp
-                    ? "menunggu jawaban agent MCP…"
+                    ? "menunggu jawaban asisten AI…"
                     : "menunggu respons pertama dari model…"}
             </div>
             {running && waitedLong && state.chars === 0 && (
               <p className="mt-2 text-[12.5px] text-steel">
                 {mcp
-                  ? "Agent MCP mengirim jawaban sekaligus setelah selesai berpikir. Biasanya 1 sampai 3 menit; pantau sesi agentnya."
+                  ? "Asisten AI mengirim jawaban sekaligus setelah selesai berpikir. Biasanya 1 sampai 3 menit. Kamu bisa melihat prosesnya di percakapan Claude atau Codex."
                   : "Beberapa provider baru mengirim jawaban setelah selesai menulis. Biasanya 30 sampai 90 detik."}
               </p>
             )}

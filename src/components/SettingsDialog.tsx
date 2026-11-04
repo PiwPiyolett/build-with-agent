@@ -1,11 +1,51 @@
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { Bot, Palette, Settings, SlidersHorizontal, Workflow, type LucideIcon } from "lucide-react";
+import { agentLabel } from "../../shared/setupGuide";
 import type { AgentKey, BrainProvider, BrainWorker, HandoverMode, PublicSettings } from "../../shared/types";
-import { ROUTER_DASHBOARD } from "../App";
+import { ROUTER_DASHBOARD, useApp } from "../App";
 import { api, type BridgeInfo, type ConnectionTest, type ModelTest } from "../lib/api";
 import { BRAIN_STARTER, HANDOVER_HINT, HANDOVER_OPTIONS, mcpConfigs } from "../lib/bridgeConfig";
 import { AGENTS, nf, timeAgo } from "../lib/format";
 import { ConnectAgents } from "./ConnectAgents";
-import { CodeBlock, CopyButton, ErrorNote, Led, Modal, Segmented, useToast } from "./ui";
+import { CodeBlock, CopyButton, ErrorNote, Led, Modal, Segmented, useSlidingThumb, useToast } from "./ui";
+
+type SectionKey = "assistant" | "behavior" | "appearance" | "advanced";
+
+const SECTIONS: { key: SectionKey; label: string; note: string; icon: LucideIcon }[] = [
+  { key: "assistant", label: "Asisten AI", note: "Lihat asisten yang terhubung dan atur sambungannya.", icon: Bot },
+  { key: "behavior", label: "Cara kerja", note: "Atur yang dilakukan asisten setelah task terbentuk.", icon: Workflow },
+  { key: "appearance", label: "Tampilan", note: "Atur tampilan BWA di laptop ini.", icon: Palette },
+  { key: "advanced", label: "Lanjutan", note: "Biasanya tidak perlu diubah.", icon: SlidersHorizontal },
+];
+
+function SettingsNav({ sections, active, onPick }: { sections: typeof SECTIONS; active: SectionKey; onPick: (key: SectionKey) => void }) {
+  const box = useRef<HTMLElement>(null);
+  const thumb = useRef<HTMLSpanElement>(null);
+  useSlidingThumb(box, thumb, "button[aria-current]", active);
+  return (
+    <nav ref={box} className="settings-nav" aria-label="Bagian pengaturan">
+      <span ref={thumb} className="settings-thumb" aria-hidden />
+      {sections.map(({ key, label, icon: Icon }) => (
+        <button key={key} type="button" aria-current={key === active ? "true" : undefined} onClick={() => onPick(key)}>
+          <Icon size={17} aria-hidden />
+          {label}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+/** One part of Settings. It stays mounted while hidden, so unsaved choices and connection checks survive moving around. */
+function SettingsPanel({ section, active, children }: { section: SectionKey; active: SectionKey; children: ReactNode }) {
+  const { label, note } = SECTIONS.find((s) => s.key === section)!;
+  return (
+    <div hidden={section !== active} className="settings-panel">
+      <h3 className="display text-[22px] leading-tight text-ink">{label}</h3>
+      <p className="mb-5 mt-1 text-[13.5px] text-steel">{note}</p>
+      {children}
+    </div>
+  );
+}
 
 const AGENT_FIELDS: { key: AgentKey; n: 1 | 2 | 3; hint: string }[] = [
   { key: "idea", n: 1, hint: "Dipakai berulang saat eksplorasi. Model cepat terasa lebih enak." },
@@ -15,7 +55,10 @@ const AGENT_FIELDS: { key: AgentKey; n: 1 | 2 | 3; hint: string }[] = [
 
 export function SettingsDialog({ open, onClose, onSaved }: { open: boolean; onClose: () => void; onSaved: () => void }) {
   const toast = useToast();
+  const { openGuide, backgroundMotion, setBackgroundMotion } = useApp();
   const listId = useId();
+  const [motion, setMotion] = useState(backgroundMotion);
+  const [section, setSection] = useState<SectionKey>("assistant");
   const [loaded, setLoaded] = useState<PublicSettings | null>(null);
   const [provider, setProvider] = useState<BrainProvider>("9router");
   const [handover, setHandover] = useState<HandoverMode>("wait");
@@ -46,6 +89,8 @@ export function SettingsDialog({ open, onClose, onSaved }: { open: boolean; onCl
     setApiKey("");
     setClearKey(false);
     setConn(null);
+    setMotion(backgroundMotion);
+    setSection("assistant");
     api.settings().then((s) => {
       setLoaded(s);
       setProvider(s.provider);
@@ -91,7 +136,8 @@ export function SettingsDialog({ open, onClose, onSaved }: { open: boolean; onCl
         maxTokens,
         timeoutSec,
       });
-      toast(provider === "mcp" ? "Otak AI: agent MCP. Pengaturan disimpan." : "Pengaturan 9router disimpan.", "success");
+      setBackgroundMotion(motion);
+      toast(provider === "mcp" ? "Pengaturan disimpan." : "Pengaturan 9router disimpan.", "success");
       onSaved();
       onClose();
     } catch (err) {
@@ -112,13 +158,22 @@ export function SettingsDialog({ open, onClose, onSaved }: { open: boolean; onCl
     onSaved();
   };
 
+  // "Cara kerja" only applies to an assistant, so with 9router it steps aside.
+  const sections = SECTIONS.filter((s) => s.key !== "behavior" || provider === "mcp");
+  const active: SectionKey = sections.some((s) => s.key === section) ? section : "assistant";
+
   return (
     <Modal
       open={open}
       onClose={onClose}
-      eyebrow="Pengaturan"
-      title={provider === "mcp" ? "Otak AI lewat agent MCP" : "Otak AI lewat 9router"}
-      width="max-w-2xl"
+      title={
+        <span className="flex items-center gap-2.5">
+          <Settings size={20} className="text-telkom-deep" aria-hidden />
+          Pengaturan
+        </span>
+      }
+      width="max-w-3xl"
+      flush
       footer={
         <>
           <button className="btn btn-secondary" onClick={onClose}>
@@ -131,35 +186,46 @@ export function SettingsDialog({ open, onClose, onSaved }: { open: boolean; onCl
       }
     >
       {!loaded ? (
-        <p className="text-steel">Memuat pengaturan…</p>
+        <p className="px-6 py-5 text-steel">Memuat pengaturan…</p>
       ) : (
-        <div className="space-y-7">
+        <div className="flex h-[min(560px,70dvh)] flex-col sm:flex-row">
+          <SettingsNav sections={sections} active={active} onPick={setSection} />
+          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-6 py-5">
+          <SettingsPanel section="assistant" active={active}>
+          <div className="space-y-7">
           {loaded.routerEnabled && (
           <section className="space-y-2.5">
-            <h3 className="eyebrow">Sumber otak AI</h3>
+            <h4 className="settings-label">Sumber otak AI</h4>
             <Segmented<BrainProvider>
               label="Sumber otak AI"
               value={provider}
               onChange={setProvider}
               options={[
                 { value: "9router", label: "9router (API)" },
-                { value: "mcp", label: "Agent MCP (Claude Code · Codex)" },
+                { value: "mcp", label: "Asisten AI (Claude · Codex)" },
               ]}
             />
             <p className="text-[12.5px] leading-snug text-steel">
               {provider === "mcp"
-                ? "Agent 1, 2, dan 3 dijawab oleh Claude Code atau Codex yang sedang standby, memakai langganan atau model agent itu sendiri. 9router tidak dibutuhkan."
+                ? "Agent 1, 2, dan 3 dijawab oleh Claude atau Codex yang percakapannya sedang terbuka, memakai langgananmu sendiri. 9router tidak dibutuhkan."
                 : "Agent 1, 2, dan 3 memanggil model lewat endpoint OpenAI-compatible dari 9router."}
             </p>
           </section>
           )}
 
-          {provider === "mcp" && <BrainPanel handover={handover} onHandover={setHandover} />}
+          {provider === "mcp" && (
+            <BrainPanel
+              onOpenGuide={() => {
+                onClose();
+                openGuide();
+              }}
+            />
+          )}
 
           {provider === "9router" && (
           <>
           <section className="space-y-3.5">
-            <h3 className="eyebrow">Koneksi</h3>
+            <h4 className="settings-label">Koneksi</h4>
             <div>
               <label className="label" htmlFor="s-url">
                 Base URL
@@ -227,7 +293,7 @@ export function SettingsDialog({ open, onClose, onSaved }: { open: boolean; onCl
           </section>
 
           <section className="space-y-3.5">
-            <h3 className="eyebrow">Model</h3>
+            <h4 className="settings-label">Model</h4>
             <datalist id={listId}>
               {models.map((m) => (
                 <option key={m.id} value={m.id} />
@@ -290,13 +356,43 @@ export function SettingsDialog({ open, onClose, onSaved }: { open: boolean; onCl
           </>
           )}
 
-          <details className="group">
-            <summary className="eyebrow cursor-pointer select-none list-none">
-              <span className="group-open:hidden">+ </span>
-              <span className="hidden group-open:inline">− </span>
-              Lanjutan
-            </summary>
-            <div className="mt-3.5 grid gap-3 sm:grid-cols-3">
+          {provider === "9router" && (
+          <p className="rounded-xl bg-wash px-3.5 py-3 text-[13px] leading-relaxed text-ink-2">
+            9router belum jalan? Buka terminal lalu jalankan <span className="kbd">9router</span>. Di{" "}
+            <a className="font-semibold text-telkom-deep underline underline-offset-2" href={ROUTER_DASHBOARD} target="_blank" rel="noreferrer">
+              dashboard 9router
+            </a>
+            , hubungkan provider (misalnya Kiro yang gratis) lalu salin API key ke sini. Nama combo 9router juga bisa dipakai
+            sebagai model agar otomatis pindah ke provider lain saat kuota habis.
+          </p>
+          )}
+          </div>
+          </SettingsPanel>
+
+          {provider === "mcp" && (
+            <SettingsPanel section="behavior" active={active}>
+              <HandoverPanel handover={handover} onHandover={setHandover} />
+            </SettingsPanel>
+          )}
+
+          <SettingsPanel section="appearance" active={active}>
+            <div className="settings-row">
+              <span className="text-[14px] font-semibold text-ink">Animasi latar</span>
+              <Segmented<"on" | "off">
+                label="Animasi latar"
+                value={motion ? "on" : "off"}
+                onChange={(v) => setMotion(v === "on")}
+                options={[
+                  { value: "on", label: "Bergerak" },
+                  { value: "off", label: "Diam" },
+                ]}
+              />
+            </div>
+            <p className="mt-2 text-[12.5px] leading-snug text-steel">Kalau laptop terasa berat, pilih Diam. Warna merahnya tetap ada, hanya tidak bergerak. Pilihan ini tersimpan di laptop ini saja.</p>
+          </SettingsPanel>
+
+          <SettingsPanel section="advanced" active={active}>
+            <div className="grid gap-3 sm:grid-cols-3">
               {provider === "9router" && (
               <>
               <div>
@@ -344,30 +440,46 @@ export function SettingsDialog({ open, onClose, onSaved }: { open: boolean; onCl
                   onChange={(e) => setTimeoutSec(Number(e.target.value))}
                 />
                 {provider === "mcp" && (
-                  <p className="mt-1 text-[12px] leading-snug text-steel">Batas waktu agent menjawab satu job setelah mengambilnya.</p>
+                  <p className="mt-1 text-[12px] leading-snug text-steel">Batas waktu asisten AI menjawab satu permintaan.</p>
                 )}
               </div>
             </div>
-          </details>
-
-          {provider === "9router" && (
-          <p className="rounded-lg bg-wash px-3.5 py-3 text-[13px] leading-relaxed text-ink-2">
-            9router belum jalan? Buka terminal lalu jalankan <span className="kbd">9router</span>. Di{" "}
-            <a className="font-semibold text-pair-blue underline underline-offset-2" href={ROUTER_DASHBOARD} target="_blank" rel="noreferrer">
-              dashboard 9router
-            </a>
-            , hubungkan provider (misalnya Kiro yang gratis) lalu salin API key ke sini. Nama combo 9router juga bisa dipakai
-            sebagai model agar otomatis pindah ke provider lain saat kuota habis.
-          </p>
-          )}
+          </SettingsPanel>
+          </div>
         </div>
       )}
     </Modal>
   );
 }
 
-/** Settings body for provider "mcp": who is standby, how to start one, a round-trip test, and the handover mode. */
-function BrainPanel({ handover, onHandover }: { handover: HandoverMode; onHandover: (mode: HandoverMode) => void }) {
+/** What happens after the tasks are split, and how conversations behave. */
+function HandoverPanel({ handover, onHandover }: { handover: HandoverMode; onHandover: (mode: HandoverMode) => void }) {
+  return (
+    <div className="space-y-5">
+      <section>
+        <h4 className="settings-label">Setelah task terbentuk, asisten AI:</h4>
+        <Segmented<HandoverMode> label="Yang dilakukan asisten setelah task terbentuk" value={handover} onChange={onHandover} options={HANDOVER_OPTIONS} />
+        <p className="mt-2 text-[12.5px] leading-snug text-steel">
+          Begitu Agent 3 selesai membagi task, asisten di percakapan itu mulai mengurus proyekmu, dan kamu melanjutkannya lewat
+          percakapan tersebut. {HANDOVER_HINT[handover]}
+        </p>
+      </section>
+      <p className="text-[12.5px] leading-snug text-steel">
+        Satu percakapan mengerjakan satu permintaan dalam satu waktu. PRD terdiri dari dua bagian, jadi lebih cepat kalau ada dua
+        percakapan yang terbuka. Pilihan model mengikuti pengaturan di aplikasi asistenmu.
+      </p>
+      <p className="rounded-xl bg-wash px-3.5 py-2.5 text-[12.5px] leading-relaxed text-ink-2">
+        <span className="font-semibold text-ink">Ingin ganti model di tengah jalan?</span> Bisa. Tekan{" "}
+        <span className="kbd">Esc</span> di percakapan, ganti dengan <span className="mono text-[12px]">/model</span>, lalu ketik
+        lagi <span className="mono text-[12px]">/bwa</span> (atau "lanjut"). Permintaan yang masuk selama jeda menunggu sekitar 2
+        menit.
+      </p>
+    </div>
+  );
+}
+
+/** The assistant part of Settings: who is ready, how to connect one, and a round-trip test. */
+function BrainPanel({ onOpenGuide }: { onOpenGuide: () => void }) {
   const [bridge, setBridge] = useState<BridgeInfo | null>(null);
   const [tab, setTab] = useState<"claude" | "codex">("claude");
   const [workers, setWorkers] = useState<BrainWorker[] | null>(null);
@@ -402,44 +514,47 @@ function BrainPanel({ handover, onHandover }: { handover: HandoverMode; onHandov
 
   return (
     <section className="space-y-3.5">
-      <h3 className="eyebrow">Agent standby</h3>
-      <div className="flex flex-wrap items-center gap-2 rounded-lg bg-wash px-3.5 py-2.5 text-[13px] text-ink-2">
+      <h4 className="settings-label">Asisten yang siap</h4>
+      <div className="flex flex-wrap items-center gap-2 rounded-xl bg-wash px-3.5 py-2.5 text-[13px] text-ink-2">
         {workers === null ? (
           <span className="text-steel">Memeriksa…</span>
         ) : workers.length === 0 ? (
           <span className="flex items-center gap-2">
-            <Led state="amber" /> Belum ada agent yang standby. Ikuti langkah di bawah.
+            <Led state="amber" /> Asisten AI belum terhubung.
           </span>
         ) : (
           workers.map((w) => (
             <span key={w.name} className="tag normal-case tracking-normal" title={`terakhir terlihat ${timeAgo(w.lastSeen)}`}>
-              <Led state="green" /> {w.name}
-              {w.busy > 0 ? ` · mengerjakan ${w.busy} job` : " · standby"}
+              <Led state="green" /> {agentLabel(w.name)}
+              {w.busy > 0 ? " · sedang bekerja" : " · siap"}
             </span>
           ))
         )}
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
+        <button className="btn btn-primary btn-sm" onClick={onOpenGuide}>
+          Buka panduan menghubungkan
+        </button>
         <button className="btn btn-secondary btn-sm" onClick={runTest} disabled={test?.testing || !workers?.length}>
-          {test?.testing ? "Menunggu jawaban agent…" : "Tes otak MCP"}
+          {test?.testing ? "Menunggu jawaban asisten…" : "Coba sambungan"}
         </button>
         {test && !test.testing && test.ok && (
           <span className="flex items-center gap-2 text-[13px] text-ink-2">
-            <Led state="green" /> {test.model.replace(/^mcp:/, "")} menjawab dalam {(test.latencyMs! / 1000).toFixed(1)} detik
+            <Led state="green" /> {agentLabel(test.model.replace(/^mcp:/, ""))} menjawab dalam {(test.latencyMs! / 1000).toFixed(1)} detik
           </span>
         )}
       </div>
-      {test && !test.testing && !test.ok && <ErrorNote message={test.error ?? "Agent tidak menjawab."} hint={test.hint} />}
+      {test && !test.testing && !test.ok && <ErrorNote message={test.error ?? "Asisten tidak menjawab."} hint={test.hint} />}
 
-      <h3 className="eyebrow pt-1">Sambungkan agent</h3>
+      <h4 className="settings-label pt-1">Sambungan</h4>
       <ConnectAgents />
 
       <details className="group rounded-lg border border-rule-2 px-3.5 py-2.5">
         <summary className="cursor-pointer select-none list-none text-[13px] font-semibold text-ink-2">
           <span className="group-open:hidden">+ </span>
           <span className="hidden group-open:inline">− </span>
-          Cara manual (jalankan perintahnya sendiri)
+          Sudah terbiasa memakai terminal? Lihat cara manualnya
         </summary>
         <div className="mt-3 space-y-3">
       <Segmented<"claude" | "codex">
@@ -459,11 +574,11 @@ function BrainPanel({ handover, onHandover }: { handover: HandoverMode; onHandov
             Minta Claude Code di chat: "daftarkan MCP server bwa dengan perintah ini", lalu tempel perintah di atas.
           </p>
           <p className="text-[13.5px] leading-relaxed text-ink-2">
-            2. Buka <span className="font-semibold text-ink">sesi baru</span> Claude Code di{" "}
-            <span className="font-semibold text-ink">folder repository proyekmu</span> (sesi yang sudah terbuka sebelum langkah 1
-            belum mengenal bwa), lalu ketik <span className="mono text-[12px]">/mcp__bwa__jadi_otak</span> di chat (atau{" "}
-            <span className="mono text-[12px]">/bwa</span> kalau perintah itu sudah dipasang). Biarkan sesinya
-            terbuka: setelah task terbentuk, sesi yang sama yang mengerjakannya.
+            2. Buka <span className="font-semibold text-ink">percakapan baru</span> Claude Code di{" "}
+            <span className="font-semibold text-ink">folder proyekmu</span> (percakapan yang sudah terbuka sebelum langkah 1
+            belum mengenal BWA), lalu ketik <span className="mono text-[12px]">/mcp__bwa__jadi_otak</span> (atau{" "}
+            <span className="mono text-[12px]">/bwa</span> kalau perintah itu sudah dipasang). Biarkan percakapannya
+            terbuka: setelah task terbentuk, percakapan yang sama yang mengerjakannya.
           </p>
         </div>
       )}
@@ -473,8 +588,8 @@ function BrainPanel({ handover, onHandover }: { handover: HandoverMode; onHandov
           <div>
             <div className="mb-1.5 flex items-center justify-between gap-2">
               <span className="text-[13.5px] text-ink-2">
-                2. Jalankan <span className="kbd">codex</span> di folder repository proyekmu, lalu kirim prompt ini dan biarkan
-                sesinya terbuka:
+                2. Jalankan <span className="kbd">codex</span> di folder proyekmu, lalu kirim pesan ini dan biarkan percakapannya
+                terbuka:
               </span>
               <CopyButton text={BRAIN_STARTER} />
             </div>
@@ -484,25 +599,6 @@ function BrainPanel({ handover, onHandover }: { handover: HandoverMode; onHandov
       )}
         </div>
       </details>
-      <div className="space-y-1.5 border-t border-rule-2 pt-3.5">
-        <h3 className="eyebrow">Setelah task terbentuk, sesi agent:</h3>
-        <Segmented<HandoverMode> label="Mode serah-terima" value={handover} onChange={onHandover} options={HANDOVER_OPTIONS} />
-        <p className="text-[12.5px] leading-snug text-steel">
-          Begitu Agent 3 selesai membagi task, sesi otak menjadi agent coding proyek itu dan kamu melanjutkan lewat chat-nya.{" "}
-          {HANDOVER_HINT[handover]}
-        </p>
-      </div>
-      <p className="text-[12.5px] leading-snug text-steel">
-        Satu agent mengerjakan job satu per satu. PRD terdiri dari dua bagian, jadi akan lebih cepat kalau ada dua agent
-        standby. Model, temperature, dan max tokens mengikuti pengaturan agent itu sendiri.
-      </p>
-      <p className="rounded-lg bg-wash px-3.5 py-2.5 text-[12.5px] leading-relaxed text-ink-2">
-        <span className="font-semibold text-ink">Ganti model di tengah jalan?</span> Bisa. Misalnya Sonnet untuk ide, lalu Opus
-        untuk topologi dan task. Tekan <span className="kbd">Esc</span> di sesi agent, ganti dengan{" "}
-        <span className="mono text-[12px]">/model</span>, lalu ketik lagi <span className="mono text-[12px]">/bwa</span> (atau
-        "lanjut"). Job yang masuk selama jeda menunggu
-        di antrean sekitar 2 menit.
-      </p>
     </section>
   );
 }

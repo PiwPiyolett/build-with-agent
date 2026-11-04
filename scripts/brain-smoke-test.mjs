@@ -14,6 +14,8 @@ const ROOT = path.resolve(import.meta.dirname, "..");
 const PORT = Number(process.env.SMOKE_PORT || 3911);
 const BWA_URL = `http://127.0.0.1:${PORT}`;
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bwa-brain-smoke-"));
+/** Words people who have never used a terminal should not meet in what BWA tells them. */
+const JARGON = /\bMCP\b|standby|jadi_otak|\bjob\b|repository|serah-terima|mode otak/i;
 
 let failures = 0;
 const check = (ok, label) => {
@@ -25,7 +27,8 @@ const check = (ok, label) => {
 
 const server = spawn(process.execPath, ["--import", "tsx", "server/index.ts"], {
   cwd: ROOT,
-  env: { ...process.env, PORT: String(PORT), BWA_DATA_DIR: dataDir, BWA_PROVIDER: "mcp" },
+  // A short "recently seen" window, so a long wait can outlast it without making this test slow.
+  env: { ...process.env, PORT: String(PORT), BWA_DATA_DIR: dataDir, BWA_PROVIDER: "mcp", BWA_BRAIN_ONLINE_MS: "3000" },
   stdio: ["ignore", "pipe", "pipe"],
 });
 let serverLog = "";
@@ -77,6 +80,8 @@ try {
 
   const before = await api("GET", "/llm/status");
   check(before.provider === "mcp" && before.state === "off" && !before.reachable, "status: mcp, belum ada agent standby");
+  check(before.error === "Asisten AI belum terhubung.", `pesan status mudah dipahami (dapat: ${before.error})`);
+  check(!JARGON.test(`${before.error} ${before.hint}`), `pesan status tanpa istilah teknis (dapat: ${before.hint})`);
 
   // ---------- 3. connect the bridge like Claude Code ----------
 
@@ -142,7 +147,8 @@ try {
 
   const exploreResult = await explore;
   check(exploreResult.last.type === "done", `run Agent 1 selesai (${exploreResult.last.type})`);
-  check(exploreResult.statuses.some((s) => s.includes("claude-code mengambil job")), "UI melihat status 'claude-code mengambil job'");
+  check(exploreResult.statuses.some((s) => s.includes("Claude sedang mengerjakan")), "UI melihat status 'Claude sedang mengerjakan'");
+  check(!exploreResult.statuses.some((s) => JARGON.test(s)), `status proses tanpa istilah teknis (dapat: ${exploreResult.statuses.join(" | ")})`);
   const saved = await api("GET", `/projects/${project.id}`);
   check(saved.idea?.title === "KasKelas" && saved.idea.dimensions[0].options.length === 2, "hasil tersimpan di proyek");
 
@@ -158,6 +164,7 @@ try {
   await tool("fail_brain_job", { job_id: job2Id, reason: "uji jalur gagal" });
   const moreResult = await more;
   check(moreResult.last.type === "error" && moreResult.last.message.includes("uji jalur gagal"), "UI menerima alasan kegagalan dari agent");
+  check(!JARGON.test(`${moreResult.last.message} ${moreResult.last.hint}`), `pesan gagal tanpa istilah teknis (dapat: ${moreResult.last.message})`);
 
   // ---------- 6. the Settings round-trip test ----------
 
@@ -166,6 +173,56 @@ try {
   await tool("submit_brain_result", { job_id: /job (b[0-9a-f]+)/.exec(job3.text)?.[1], output: "OK" });
   const pingResult = await ping;
   check(pingResult.ok && pingResult.reply === "OK" && pingResult.model === "mcp:claude-code", "Tes otak MCP di Pengaturan berhasil");
+
+  // ---------- 6b. longer waits: fewer empty answers, so less of the user's plan is spent on waiting ----------
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  // BWA registers a 100-second wait, so the tool must accept it.
+  const pingLong = api("POST", "/settings/test-brain", {});
+  await sleep(200);
+  const longJob = await tool("wait_for_brain_job", { wait_seconds: 100 });
+  const longJobId = /job (b[0-9a-f]+)/.exec(longJob.text)?.[1];
+  check(!!longJobId, `tool menerima waktu tunggu 100 detik (dapat: ${longJob.text.slice(0, 80)})`);
+  if (longJobId) {
+    await tool("submit_brain_result", { job_id: longJobId, output: "OK" });
+    await pingLong;
+  }
+
+  // A conversation in the middle of a long wait has said nothing for a while, but it is still there.
+  const midWait = tool("wait_for_brain_job", { wait_seconds: 5 });
+  await sleep(3800);
+  check((await api("GET", "/llm/status")).state === "ok", "asisten yang sedang menunggu lama tetap dianggap siap");
+  await midWait;
+
+  // The registered wait time is what a plain call uses.
+  const quick = new Client({ name: "claude-code", version: "0.0.0" });
+  await quick.connect(
+    new StdioClientTransport({
+      command: process.execPath,
+      args: [path.join(ROOT, "bridge", "mcp-server.mjs")],
+      env: { ...process.env, BWA_URL, BWA_AGENT_NAME: "quick", BWA_WAIT_SEC: "1" },
+    }),
+  );
+  const quickStart = Date.now();
+  await quick.callTool({ name: "wait_for_brain_job", arguments: {} }, undefined, { timeout: 90_000 });
+  check(Date.now() - quickStart < 8000, `waktu tunggu mengikuti BWA_WAIT_SEC (butuh ${Date.now() - quickStart} ms)`);
+  await quick.close();
+
+  // Someone pressed Esc: the wait must end at once, or the next request goes to a conversation that stopped listening.
+  const stop = new AbortController();
+  const stopped = client.callTool({ name: "wait_for_brain_job", arguments: { wait_seconds: 30 } }, undefined, { signal: stop.signal, timeout: 90_000 }).catch(() => "stopped");
+  await sleep(300);
+  stop.abort();
+  await stopped;
+  await sleep(300);
+  const nextPing = api("POST", "/settings/test-brain", {});
+  const rescued = await api("POST", "/agent/brain/wait", { agent: "codex", waitSec: 5 });
+  check(rescued.job?.kind === "job", "permintaan berikutnya tidak jatuh ke percakapan yang sudah dihentikan");
+  if (rescued.job) {
+    await api("POST", `/agent/brain/jobs/${rescued.job.id}/result`, { agent: "codex", output: "OK" });
+    await nextPing;
+  }
 
   // ---------- 7. handover: Agent 3 splits the tasks, then the brain session becomes the coding agent ----------
 
@@ -207,7 +264,8 @@ try {
   check(/Mulai dari T01\?/.test(waitHandover) && /Do not start coding/.test(waitHandover), "mode 'tunggu perintah': lapor lalu tanya");
   check(/First ready task: T01/.test(waitHandover), "serah-terima menyebut task pertama yang siap");
   const afterHandover = await api("GET", `/projects/${project.id}`);
-  check(afterHandover.activity.some((a) => a.by === "claude-code" && /menerima serah-terima/.test(a.text)), "feed aktivitas mencatat serah-terima diterima");
+  check(afterHandover.activity.some((a) => a.by === "claude-code" && /siap mengerjakan proyek ini/.test(a.text)), "feed aktivitas mencatat serah-terima diterima");
+  check(!afterHandover.activity.some((a) => JARGON.test(a.text)), `feed aktivitas tanpa istilah teknis (dapat: ${afterHandover.activity.map((a) => a.text).join(" | ")})`);
   const retired = await api("GET", "/brain/status");
   check(!retired.workers.some((w) => w.name === "claude-code"), "claude-code tidak lagi dihitung standby setelah serah-terima");
 

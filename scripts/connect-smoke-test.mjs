@@ -14,9 +14,12 @@ const PORT = Number(process.env.SMOKE_PORT || 3912);
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "bwa-connect-smoke-"));
 const claudeHome = path.join(tmp, "claude");
 const codexHome = path.join(tmp, "codex");
+const userHome = path.join(tmp, "home");
 const dataDir = path.join(tmp, "data");
-for (const dir of [claudeHome, codexHome, dataDir]) fs.mkdirSync(dir, { recursive: true });
-const isolatedEnv = { ...process.env, CLAUDE_CONFIG_DIR: claudeHome, CODEX_HOME: codexHome };
+for (const dir of [claudeHome, codexHome, userHome, dataDir]) fs.mkdirSync(dir, { recursive: true });
+// Variables passed down by a parent Claude session would make `claude auth status` report that session's login.
+const cleanEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(CLAUDE|ANTHROPIC)/.test(k)));
+const isolatedEnv = { ...cleanEnv, CLAUDE_CONFIG_DIR: claudeHome, CODEX_HOME: codexHome, USERPROFILE: userHome, HOME: userHome };
 
 let failures = 0;
 const check = (ok, label) => {
@@ -24,25 +27,8 @@ const check = (ok, label) => {
   if (!ok) failures++;
 };
 
-/** The Claude Code CLI, found the way a user's machine has it: on PATH or bundled with the desktop app. */
-function findClaude() {
-  try {
-    const cmd = process.platform === "win32" ? "where" : "which";
-    return execFileSync(cmd, ["claude"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).split(/\r?\n/)[0].trim();
-  } catch {
-    const base = path.join(process.env.APPDATA ?? "", "Claude", "claude-code");
-    const versions = fs.existsSync(base) ? fs.readdirSync(base).sort((a, b) => b.localeCompare(a, undefined, { numeric: true })) : [];
-    for (const v of versions) {
-      for (const hash of fs.readdirSync(path.join(base, v))) {
-        const exe = path.join(base, v, hash, "claude.exe");
-        if (fs.existsSync(exe)) return exe;
-      }
-    }
-  }
-  return null;
-}
-
-const claude = findClaude();
+/** The real Claude Code, as BWA itself finds it (read from the first status). */
+let claude = null;
 /** What Claude Code itself reports for the bwa server in the isolated config, or null when absent. */
 function claudeGetBwa() {
   try {
@@ -57,31 +43,104 @@ const server = spawn(process.execPath, ["--import", "tsx", "server/index.ts"], {
   env: { ...isolatedEnv, PORT: String(PORT), BWA_DATA_DIR: dataDir },
   stdio: "ignore",
 });
-const api = async (method, p, body) => {
-  const res = await fetch(`http://127.0.0.1:${PORT}/api${p}`, {
+const apiAt = (port) => async (method, p, body) => {
+  const res = await fetch(`http://127.0.0.1:${port}/api${p}`, {
     method,
     headers: { "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   return { status: res.status, body: await res.json().catch(() => null) };
 };
+const api = apiAt(PORT);
 
-try {
-  if (!claude) throw new Error("Claude Code CLI tidak ditemukan di komputer ini; tes Claude tidak bisa dijalankan.");
+async function waitUp(call) {
   for (let i = 0; ; i++) {
     try {
-      if ((await api("GET", "/health")).body?.ok) break;
+      if ((await call("GET", "/health")).body?.ok) return;
     } catch {
       /* not up yet */
     }
     if (i > 80) throw new Error("server BWA tidak menyala");
     await new Promise((r) => setTimeout(r, 250));
   }
+}
+
+/** One more private server with its own environment, for a machine layout the real one does not have. */
+async function scenario(port, env, run) {
+  const child = spawn(process.execPath, ["--import", "tsx", "server/index.ts"], {
+    cwd: ROOT,
+    env: { ...env, PORT: String(port), BWA_DATA_DIR: dataDir },
+    stdio: "ignore",
+  });
+  try {
+    const call = apiAt(port);
+    await waitUp(call);
+    await run(call);
+  } finally {
+    child.kill();
+  }
+}
+
+try {
+  await waitUp(api);
+
+  // ---------- 0a. Claude Code bundled with the Microsoft Store build of the desktop app ----------
+  if (process.platform === "win32") {
+    const machine = path.join(tmp, "store-machine");
+    const pkg = path.join(machine, "Local", "Claude-Data", "claude_test");
+    fs.mkdirSync(pkg, { recursive: true });
+    const noClaude = Object.fromEntries(Object.entries(isolatedEnv).filter(([k]) => !/^(path|appdata|localappdata|bwa_claude_path)$/i.test(k)));
+    const env = {
+      ...noClaude,
+      PATH: "",
+      APPDATA: path.join(machine, "Roaming"),
+      LOCALAPPDATA: path.join(machine, "Local"),
+      USERPROFILE: machine,
+      HOME: machine,
+    };
+    await scenario(PORT + 1, env, async (call) => {
+      const notReady = (await call("GET", "/connect")).body?.claude;
+      check(notReady?.found === false && notReady?.appFound === true, "aplikasi Claude terpasang, tapi Claude Code di dalamnya belum ada");
+      const exe = path.join(pkg, "claude-code", "2.1.9", "abc123", "claude.exe");
+      fs.mkdirSync(path.dirname(exe), { recursive: true });
+      fs.writeFileSync(exe, "");
+      const found = (await call("GET", "/connect")).body?.claude;
+      check(found?.found === true && found?.detail === exe, `Claude Code versi Microsoft Store ditemukan (dapat: ${found?.detail})`);
+      check(found?.via === "app", `jalurnya dikenali sebagai aplikasi (dapat: ${found?.via})`);
+      // Outside the app, `claude auth status` says logged out even when the app is signed in, so it proves nothing here.
+      check(found?.signedIn === null, `status login aplikasi tidak dianggap pasti (dapat: ${found?.signedIn})`);
+    });
+  }
+
+  // ---------- 0b. sign-in state of a terminal install, through a stand-in CLI ----------
+  {
+    const dir = path.join(tmp, "fake-cli");
+    fs.mkdirSync(dir, { recursive: true });
+    const marker = path.join(dir, "signed-in");
+    const win = process.platform === "win32";
+    const exe = path.join(dir, win ? "claude.cmd" : "claude");
+    fs.writeFileSync(
+      exe,
+      win
+        ? `@echo off\r\nif not "%~1"=="auth" exit /b 1\r\nif exist "${marker}" (echo {"authMethod":"claude.ai"}& exit /b 0)\r\necho {"authMethod":"none"}& exit /b 1\r\n`
+        : `#!/bin/sh\n[ "$1" = auth ] || exit 1\nif [ -e "${marker}" ]; then echo '{"authMethod":"claude.ai"}'; exit 0; fi\necho '{"authMethod":"none"}'; exit 1\n`,
+    );
+    fs.chmodSync(exe, 0o755);
+    await scenario(PORT + 2, { ...isolatedEnv, BWA_CLAUDE_PATH: exe }, async (call) => {
+      const out = (await call("GET", "/connect")).body?.claude;
+      check(out?.via === "cli" && out?.signedIn === false, `CLI belum login terbaca (via ${out?.via}, signedIn ${out?.signedIn})`);
+      fs.writeFileSync(marker, "");
+      const inn = (await call("GET", "/connect")).body?.claude;
+      check(inn?.signedIn === true, `CLI sudah login terbaca (signedIn ${inn?.signedIn})`);
+    });
+  }
 
   // ---------- 1. status before anything is connected ----------
   const before = await api("GET", "/connect");
+  claude = before.body?.claude?.detail || null;
+  if (!claude) throw new Error("Claude Code tidak ditemukan di komputer ini; tes Claude tidak bisa dijalankan.");
   check(before.status === 200, `GET /api/connect menjawab (HTTP ${before.status})`);
-  check(before.body?.claude?.found === true, "Claude Code CLI terdeteksi oleh BWA");
+  check(before.body?.claude?.found === true, "Claude Code terdeteksi oleh BWA");
   check(before.body?.claude?.state === "disconnected", `Claude: belum tersambung (dapat: ${before.body?.claude?.state})`);
   check(Array.isArray(before.body?.claude?.changes) && before.body.claude.changes.length > 0, "Claude: pratinjau perubahan tersedia");
 
@@ -92,6 +151,7 @@ try {
   const got = claudeGetBwa();
   check(!!got && got.includes(bridge.mcpServerPath), "claude mcp get bwa: terdaftar dengan jalur bridge BWA ini");
   check(!!got && /Scope: User/i.test(got), "terdaftar di scope user (berlaku di semua folder)");
+  check(!!got && got.includes("BWA_WAIT_SEC=100"), "asisten menunggu 100 detik sebelum bertanya lagi");
   const skill = path.join(claudeHome, "skills", "bwa", "SKILL.md");
   // The plugin ships the skill as `start` (/bwa:start); a personal copy is renamed so it runs as /bwa.
   const repoSkill = fs.readFileSync(path.join(ROOT, "plugins", "bwa", "skills", "start", "SKILL.md"), "utf8");
@@ -111,6 +171,12 @@ try {
   check(fixed.body?.state === "connected", "Sambungkan ulang memperbaikinya");
   const gotFixed = claudeGetBwa();
   check(!!gotFixed && gotFixed.includes(bridge.mcpServerPath) && !gotFixed.includes("BWA-lama"), "entri lama diganti, bukan diduplikasi");
+  // Connected by an older BWA: right path, but it still asks every 40 seconds and uses up the user's quota.
+  cli(["mcp", "remove", "bwa", "--scope", "user"]);
+  cli(["mcp", "add", "bwa", "--scope", "user", "--transport", "stdio", "--", bridge.command, bridge.mcpServerPath]);
+  const noWait = (await api("GET", "/connect")).body?.claude;
+  check(noWait?.state === "outdated", `sambungan tanpa waktu tunggu perlu diperbarui (dapat: ${noWait?.state})`);
+  await api("POST", "/connect/claude", {});
 
   // ---------- 4. disconnect Claude Code ----------
   const removed = await api("DELETE", "/connect/claude");
@@ -131,6 +197,20 @@ try {
   check(written.includes(`command = "${slash(bridge.command)}"`), "command menunjuk ke runtime bridge BWA");
   check(written.includes(`args = ["${slash(bridge.mcpServerPath)}"]`), "args menunjuk ke mcp-server.mjs BWA ini");
   check(written.includes(`BWA_URL = "${bridge.apiUrl}"`) && written.includes('BWA_AGENT_NAME = "codex"'), "env berisi BWA_URL dan BWA_AGENT_NAME");
+  check(written.includes('BWA_WAIT_SEC = "100"') && /^tool_timeout_sec = 130$/m.test(written), "Codex diberi waktu tunggu 100 detik, dengan batas alat yang lebih longgar");
+  check(/^default_tools_approval_mode = "approve"$/m.test(written), "alat BWA tidak meminta izin di setiap panggilan");
+  const codexSkill = path.join(userHome, ".agents", "skills", "bwa", "SKILL.md");
+  const codexSkillText = fs.existsSync(codexSkill) ? fs.readFileSync(codexSkill, "utf8") : "";
+  check(/^name: bwa$/m.test(codexSkillText) && /wait_for_brain_job/.test(codexSkillText), "perintah pendek $bwa terpasang untuk Codex");
+  check(codexOn.body?.skill === true, "status Codex: perintah $bwa terpasang");
+  check(codexOn.body?.signedIn === null, "status login Codex tidak dianggap pasti");
+  fs.rmSync(codexSkill);
+  check((await api("GET", "/connect")).body?.codex?.skill === false, "perintah $bwa yang hilang terdeteksi");
+  await api("POST", "/connect/codex", {});
+  check(fs.existsSync(codexSkill), "Hubungkan ulang memasang lagi perintah $bwa");
+  const otherSkill = path.join(userHome, ".agents", "skills", "punya-guru", "SKILL.md");
+  fs.mkdirSync(path.dirname(otherSkill), { recursive: true });
+  fs.writeFileSync(otherSkill, "punya orang lain");
   // Optional, needs the network: the real Codex CLI must read the table BWA wrote.
   if (process.env.BWA_TEST_CODEX === "1") {
     let codexSays = "";
@@ -169,6 +249,11 @@ try {
   check((await api("GET", "/connect")).body?.codex?.state === "outdated", "Codex: blok bwa lama terdeteksi 'outdated'");
   await api("POST", "/connect/codex", {});
   const merged = fs.readFileSync(toml, "utf8");
+  // Connected by an older BWA: right path, but without the wait and approval settings.
+  const olderBlock = `[mcp_servers.bwa]\ncommand = "${slash(bridge.command)}"\nargs = ["${slash(bridge.mcpServerPath)}"]\n`;
+  fs.writeFileSync(toml, olderBlock);
+  check((await api("GET", "/connect")).body?.codex?.state === "outdated", "Codex: sambungan tanpa waktu tunggu perlu diperbarui");
+  fs.writeFileSync(toml, merged);
   check(merged.startsWith('model = "gpt-5-codex"'), "pengaturan model di atas tetap ada");
   check(merged.includes('[mcp_servers.other]\ncommand = "other-server"'), "MCP server lain tidak tersentuh");
   check(merged.includes('[profiles.fast]\nmodel = "gpt-5-mini"'), "profile setelah blok bwa tetap ada");
@@ -182,6 +267,8 @@ try {
   const left = fs.readFileSync(toml, "utf8");
   check(!left.includes("[mcp_servers.bwa]"), "blok [mcp_servers.bwa] hilang");
   check(left.includes('model = "gpt-5-codex"') && left.includes("[mcp_servers.other]") && left.includes("[profiles.fast]"), "pengaturan lain tetap utuh");
+  check(!fs.existsSync(path.dirname(codexSkill)), "folder perintah $bwa dihapus");
+  check(fs.existsSync(otherSkill), "skill lain milik pengguna tidak tersentuh");
 } catch (err) {
   failures++;
   console.error("✗ error:", err?.message ?? err);

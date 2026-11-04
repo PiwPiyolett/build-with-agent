@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Check, Plus, RotateCcw, Trash2, X } from "lucide-react";
 import type { Project, Task, TaskLogKind, TaskPriority, TaskStatus } from "../../shared/types";
 import { Segmented, StatusLed } from "../components/ui";
@@ -27,7 +27,13 @@ interface Props {
   onOpenTask: (id: string) => void;
 }
 
-export function TaskDrawer({ project, task, onClose, onPatch, onDelete, onOpenTask }: Props) {
+export function TaskDrawer({ project, task, onClose: finishClosing, onPatch, onDelete, onOpenTask }: Props) {
+  // Slides out first, then tells the page it is gone. The wait matches the drawer's leaving animation in index.css.
+  const [closing, setClosing] = useState(false);
+  const onClose = useCallback(() => {
+    setClosing(true);
+    setTimeout(finishClosing, 180);
+  }, [finishClosing]);
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description);
   const [hint, setHint] = useState(task.agentHint);
@@ -60,9 +66,9 @@ export function TaskDrawer({ project, task, onClose, onPatch, onDelete, onOpenTa
   const featureOptions = nodes.filter((n) => n.kind !== "product" && !task.featureIds.includes(n.id));
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end bg-ink/25" onMouseDown={onClose}>
+    <div className={cx("modal-backdrop fixed inset-0 z-40 flex justify-end bg-ink/25", closing && "is-leaving")} onMouseDown={onClose}>
       <aside
-        className="rise-in flex h-full w-full max-w-[540px] flex-col bg-panel shadow-2xl"
+        className={cx("drawer-panel flex h-full w-full max-w-[540px] flex-col bg-panel shadow-2xl", closing && "is-leaving")}
         onMouseDown={(e) => e.stopPropagation()}
         aria-label={`Task ${task.id}`}
       >

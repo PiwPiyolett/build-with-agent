@@ -9,7 +9,7 @@ allowed-tools: mcp__bwa__wait_for_brain_job, mcp__bwa__submit_brain_result, mcp_
 # BWA: connect this session
 
 Connects this session to BWA (Build With Agent) through the `bwa` MCP server. Arguments: `$ARGUMENTS`.
-Talk to the user in their language.
+Talk to the user in their language and in plain words. They may be a teacher who has never used a terminal, so say "BWA", "percakapan ini" and "folder ini", and avoid words like MCP, server, session, repository and job.
 
 ## 1. Check the connection
 
@@ -26,7 +26,7 @@ Done when the `mcp__bwa__*` tools answer and BWA is reachable.
 
 ## 2a. No argument: brain mode
 
-1. Tell the user in one line that this session is now standby as BWA's brain and they can continue in the BWA app.
+1. Tell the user in one line that you are ready and they can continue in the BWA app. Remind them to keep this conversation open while they work, and to close it when they finish so their plan's usage is not spent on waiting.
 2. Run the brain loop from the bwa server instructions: `wait_for_brain_job`, answer each job exactly as its SYSTEM section asks, `submit_brain_result`, and poll again with no chat between calls.
    - A reply noting that BWA uses 9router: tell the user once to switch to the MCP brain in BWA's settings, then keep polling.
 

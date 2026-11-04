@@ -2,7 +2,7 @@
 
 [English](README.md) · **Bahasa Indonesia**
 
-Dari satu kalimat ide ke task yang dikerjakan dan dicentang agent coding, atau ke PRD yang siap dibagikan.
+Dari satu kalimat ide ke task yang dikerjakan dan dicentang agent coding, atau ke PRD yang siap dibagikan. Versi ini bertema SMK Telkom Purwokerto.
 
 BWA menjalankan tiga agent AI. Otaknya adalah agent coding yang sudah kamu pakai, yaitu **Claude Code atau Codex**, yang tersambung lewat MCP dan memakai langganan atau modelnya sendiri. Tidak perlu API key.
 
@@ -41,12 +41,12 @@ Aplikasi tetap berjalan di tray saat jendelanya ditutup, supaya agent tetap bisa
 
 ### Cara A: satu klik di BWA (disarankan)
 
-Buka **Pengaturan** (lampu status di kanan atas) → **Sambungkan agent**, lalu klik **Sambungkan** pada Claude Code dan/atau Codex. BWA menampilkan dulu apa saja yang akan diubah:
+Saat pertama dibuka, BWA menampilkan panduan **Hubungkan asisten AI**. Panduan ini bisa dibuka lagi dari **Bantuan** atau **Pengaturan** (kanan atas). Ikuti empat langkahnya: pasang aplikasi Claude atau ChatGPT, masuk ke akunmu, klik **Hubungkan**, lalu mulai percakapan baru. Langkah yang bisa diperiksa BWA akan tercentang sendiri. Sebelum mengubah apa pun, BWA menampilkan apa saja yang akan diubah:
 
-- **Claude Code**: menjalankan `claude mcp add bwa --scope user …` dan memasang perintah `/bwa`. BWA juga menemukan `claude` bawaan aplikasi desktop Claude, walaupun tidak ada di PATH.
-- **Codex**: menulis bagian `[mcp_servers.bwa]` di `~/.codex/config.toml`. Isi lain file itu tidak disentuh, dan versi sebelumnya disimpan sebagai `config.toml.bak-bwa`.
+- **Claude Code**: menjalankan `claude mcp add bwa --scope user …` dan memasang perintah `/bwa`. BWA juga menemukan `claude` bawaan aplikasi desktop Claude, termasuk versi Microsoft Store, walaupun tidak ada di PATH.
+- **Codex**: menulis bagian `[mcp_servers.bwa]` di `~/.codex/config.toml` dan memasang perintah `$bwa` di `~/.agents/skills/bwa`. Isi lain file itu tidak disentuh, dan versi sebelumnya disimpan sebagai `config.toml.bak-bwa`.
 
-Kalau BWA dipindah atau dipasang ulang, kartunya berubah kuning ("menunjuk ke lokasi BWA lain") dan **Perbarui** membereskannya. **Hapus koneksi** mencabut pendaftaran BWA dari agent itu. Tombol ini *bukan* untuk menghentikan mode otak: untuk itu cukup tekan Esc di sesi agent. Perintah manualnya ada di **Cara manual**, di bawah kartu.
+Kalau BWA dipindah, dipasang ulang, atau diperbarui, kartunya berubah kuning ("sambungan perlu diperbarui") dan **Perbarui** membereskannya. **Putuskan** mencabut pendaftaran BWA dari agent itu. Tombol ini *bukan* untuk menghentikan asisten: untuk itu cukup tekan Esc atau tutup percakapannya. Perintah manualnya ada di bagian cara manual, di bawah kartu.
 
 ### Cara B: plugin Claude Code
 
@@ -62,8 +62,8 @@ Plugin ini menambahkan `/bwa:start`. Saat pertama kali dijalankan dan BWA sedang
 ## Cara pakai
 
 1. Buka **sesi baru** agent di **folder repository proyekmu** (tempat kodenya akan ditulis).
-2. Claude Code: ketik `/bwa` (atau `/bwa:start` dari plugin). Codex: kirim prompt "jadi otak" dari Pengaturan BWA.
-3. Lampu di BWA berubah hijau ("Agent MCP · claude-code"). Kerjakan Ide dan Topologi di BWA, dan biarkan sesinya tetap terbuka.
+2. Claude Code: ketik `/bwa` (atau `/bwa:start` dari plugin). Codex: ketik `$bwa`.
+3. Lampu di BWA berubah hijau ("Asisten AI siap · Claude"). Kerjakan Ide dan Topologi di BWA, dan biarkan sesinya tetap terbuka. Kalau sudah selesai, tutup sesinya, karena selama menunggu pun ia memakai sedikit jatah langgananmu.
 4. Pilih apa yang terjadi setelah task terbentuk, di dialog **Mau diapakan idenya?** (di atas tombol "Bagi jadi task") atau di Pengaturan:
 
 | Mode | Yang dilakukan sesi agent |
@@ -81,7 +81,7 @@ Perlu diketahui:
 - Kualitas dan kecepatan ditentukan model agent itu sendiri. Untuk ganti model di tengah jalan (misalnya Sonnet untuk ide, Opus untuk topologi dan task): tekan Esc, jalankan `/model`, lalu ketik `/bwa` atau "lanjut". Job yang masuk selama jeda menunggu di antrean sekitar dua menit.
 - Selama mode otak, sesi agent tidak menyentuh file. Kode baru ditulis setelah serah-terima.
 
-Cara kerjanya: setiap kali kamu menjalankan agent di UI, BWA menaruh prompt-nya di antrean. Sesi yang standby memanggil `wait_for_brain_job` (long-poll sekitar 40 detik), menjawab persis sesuai instruksi job, lalu mengirimnya dengan `submit_brain_result`. BWA mengubah jawabannya menjadi ide, topologi, atau task.
+Cara kerjanya: setiap kali kamu menjalankan agent di UI, BWA menaruh prompt-nya di antrean. Sesi yang standby memanggil `wait_for_brain_job` (long-poll sekitar 100 detik kalau disambungkan lewat BWA, 40 detik kalau manual), menjawab persis sesuai instruksi job, lalu mengirimnya dengan `submit_brain_result`. BWA mengubah jawabannya menjadi ide, topologi, atau task. Tiap jawaban kosong memakai satu giliran model, jadi waktu tunggu yang lebih panjang lebih hemat jatah.
 
 ## Jalur PRD
 
@@ -115,6 +115,8 @@ Tes (masing-masing memakai server, folder data, dan folder konfigurasi Claude Co
 ```bash
 node scripts/brain-smoke-test.mjs     # otak MCP dari ujung ke ujung
 node scripts/connect-smoke-test.mjs   # sambungkan satu klik (butuh Claude Code terpasang; BWA_TEST_CODEX=1 juga memeriksa lewat Codex CLI sungguhan)
+node --import tsx scripts/setup-guide-test.mjs   # logika langkah panduan Hubungkan asisten AI
+node --import tsx scripts/ui-logic-test.mjs      # alamat halaman, progres di Riwayat, arah gerak pendaran merah
 node scripts/launch-test.mjs          # menyalakan aplikasi desktop hasil build dari release/ lalu memeriksanya
 ```
 
@@ -131,11 +133,13 @@ server/llm.ts          titik masuk otak: chat() → server/brainQueue.ts (MCP) a
 server/brainQueue.ts   antrean job untuk otak MCP (long-poll, timeout, status standby, serah-terima)
 server/connect.ts      sambungkan satu klik untuk Claude Code dan Codex
 bridge/                MCP server (stdio) dan CLI untuk agent coding
-plugins/bwa/           plugin Claude Code (/bwa:start); juga dipasang sebagai /bwa oleh tombol Sambungkan
+plugins/bwa/           plugin Claude Code (/bwa:start); juga dipasang sebagai /bwa oleh tombol Hubungkan, dan codex/ sebagai $bwa
 .claude-plugin/        marketplace plugin untuk repository ini
 electron/main.ts       aplikasi desktop: server di dalam aplikasi, jendela, tray
 shared/types.ts        model data bersama
-src/                   UI React: beranda, Ide, Topologi, Task, PRD
+shared/setupGuide.ts   logika langkah panduan Hubungkan asisten AI; teksnya di src/lib/setupGuide.ts
+src/                   UI React: Halaman Utama, Riwayat, Bantuan, Ide, Topologi, Task, PRD
+src/lib/brand.ts       nama sekolah, logo, gambar, dan kutipan; filenya di public/brand/
 scripts/               build desktop, ikon, tes
 ```
 
@@ -148,3 +152,5 @@ scripts/               build desktop, ikon, tes
 ## Lisensi
 
 [MIT](LICENSE) © Ariqo Banyusila Abrar
+
+Lisensi MIT berlaku untuk kode. Logo Telkom Schools dan gambar sekolah di `public/brand/` milik pemiliknya masing-masing dan tidak termasuk dalam lisensi ini.

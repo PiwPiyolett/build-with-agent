@@ -236,7 +236,7 @@ function TaskCard({ task, project, onOpen }: { task: Task; project: Project; onO
   const waiting = task.status === "todo" ? unmet(project, task) : [];
   const blockNote = task.status === "blocked" ? [...task.log].reverse().find((l) => l.kind === "block")?.text : undefined;
   return (
-    <button className="card w-full p-3 text-left transition-colors hover:border-steel" onClick={onOpen}>
+    <button className="card lift w-full rounded-[14px] p-3 text-left" onClick={onOpen}>
       <div className="flex items-center gap-2">
         <StatusLed status={task.status} />
         <span className="mono text-[11px] font-semibold text-ink-2">{task.id}</span>

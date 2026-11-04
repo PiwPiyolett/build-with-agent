@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Download } from "lucide-react";
 import type { Project } from "../../shared/types";
+import { useApp } from "../App";
 import { CodeBlock, CopyButton, Led, Modal, Segmented } from "../components/ui";
 import { api, type BridgeInfo } from "../lib/api";
 import { mcpConfigs } from "../lib/bridgeConfig";
@@ -11,6 +12,7 @@ type Tab = "claude" | "codex" | "json" | "cli";
 const SYSTEM_ACTORS = new Set(["user", "agent-1", "agent-2", "agent-3", "api", "pipeline-test"]);
 
 export function ConnectAgentDialog({ open, onClose, project }: { open: boolean; onClose: () => void; project: Project }) {
+  const { openGuide } = useApp();
   const [bridge, setBridge] = useState<BridgeInfo | null>(null);
   const [tab, setTab] = useState<Tab>("claude");
 
@@ -29,7 +31,7 @@ export function ConnectAgentDialog({ open, onClose, project }: { open: boolean; 
   const { url, cli, claude: claudeCmd, codex: codexToml, json } = mcpConfigs(bridge, { BWA_PROJECT_ID: pid });
 
   const starter =
-    `Kamu terhubung ke BWA lewat MCP server "bwa". Kerjakan proyek ${name} (id ${pid}) di repository ini.\n` +
+    `Kamu terhubung ke BWA lewat MCP server "bwa". Kerjakan proyek ${name} (id ${pid}) di folder ini.\n` +
     "Panggil get_project_context sekali. Lalu ulangi: get_next_task (claim=true), kerjakan sampai semua acceptance criteria terpenuhi dan terverifikasi, " +
     "lalu complete_task dengan ringkasan dan daftar file yang diubah. Kalau butuh keputusanku, panggil block_task lalu lanjut ke task lain. " +
     "Berhenti saat semua task selesai.";
@@ -39,15 +41,30 @@ node "${cli}" done T03 --summary "Apa yang dikerjakan" --files "src/a.ts,src/b.t
 node "${cli}" help`;
 
   return (
-    <Modal open={open} onClose={onClose} eyebrow="Agent coding" title="Hubungkan Claude Code, Codex, atau agent lain" width="max-w-3xl">
+    <Modal open={open} onClose={onClose} eyebrow="Yang mengerjakan task" title="Hubungkan Claude, Codex, atau asisten lain" width="max-w-3xl">
       <div className="space-y-5">
         <p className="text-[14px] leading-relaxed text-ink-2">
-          Agent terhubung ke BWA lewat MCP. Ia membaca brief, mengambil task berikutnya, mengerjakannya di repository
-          kodemu, lalu mencentangnya di sini. Aplikasi BWA harus tetap berjalan selama agent bekerja.
+          Asisten AI membaca rencana proyekmu, mengambil task berikutnya, mengerjakannya di folder proyekmu, lalu mencentangnya
+          di sini. BWA harus tetap terbuka selama asisten bekerja.
         </p>
 
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-rule px-3.5 py-3">
+          <span className="text-[13.5px] text-ink-2">
+            Memakai <span className="font-semibold text-ink">Claude</span> atau <span className="font-semibold text-ink">Codex</span>? Ikuti panduannya, tidak perlu mengetik perintah di bawah.
+          </span>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={() => {
+              onClose();
+              openGuide();
+            }}
+          >
+            Buka panduan
+          </button>
+        </div>
+
         <div className="flex flex-wrap items-center gap-2 rounded-lg bg-wash px-3.5 py-2.5 text-[13px] text-ink-2">
-          <span className="font-semibold text-ink">Agent yang pernah terhubung:</span>
+          <span className="font-semibold text-ink">Asisten yang pernah terhubung:</span>
           {agents.length === 0 ? (
             <span className="text-steel">belum ada</span>
           ) : (
@@ -67,16 +84,16 @@ node "${cli}" help`;
             { value: "claude", label: "Claude Code" },
             { value: "codex", label: "Codex" },
             { value: "json", label: "Cursor · Gemini · lainnya" },
-            { value: "cli", label: "Tanpa MCP" },
+            { value: "cli", label: "Lewat terminal" },
           ]}
         />
 
         {tab === "claude" && (
           <div className="space-y-4">
-            <CodeBlock label="1. Jalankan sekali di folder repository proyekmu" code={claudeCmd} />
+            <CodeBlock label="1. Jalankan sekali di folder proyekmu" code={claudeCmd} />
             <p className="text-[13.5px] text-ink-2">
               2. Buka <span className="kbd">claude</span> di folder itu, cek dengan <span className="kbd">/mcp</span>, lalu kirim
-              prompt di bawah. Bisa juga dengan perintah <span className="mono text-[12px]">/mcp__bwa__kerjakan_task</span>.
+              pesan di bawah. Bisa juga dengan perintah <span className="mono text-[12px]">/mcp__bwa__kerjakan_task</span>.
             </p>
           </div>
         )}
@@ -84,7 +101,7 @@ node "${cli}" help`;
           <div className="space-y-4">
             <CodeBlock label="1. Tambahkan ke ~/.codex/config.toml (Windows: %USERPROFILE%\.codex\config.toml)" code={codexToml} />
             <p className="text-[13.5px] text-ink-2">
-              2. Jalankan <span className="kbd">codex</span> di folder repository proyekmu, lalu kirim prompt di bawah.
+              2. Jalankan <span className="kbd">codex</span> di folder proyekmu, lalu kirim pesan di bawah.
             </p>
           </div>
         )}
@@ -117,7 +134,7 @@ node "${cli}" help`;
 
         <div className="border-t border-rule-2 pt-4">
           <div className="mb-1.5 flex items-center justify-between gap-2">
-            <span className="text-[13px] font-semibold text-ink-2">Prompt untuk agent</span>
+            <span className="text-[13px] font-semibold text-ink-2">Pesan untuk asisten</span>
             <CopyButton text={starter} />
           </div>
           <p className="rounded-lg border border-rule bg-wash px-3.5 py-3 text-[13.5px] leading-relaxed text-ink">{starter}</p>
@@ -125,8 +142,8 @@ node "${cli}" help`;
 
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-rule px-3.5 py-3">
           <div className="text-[13px] text-ink-2">
-            <span className="font-semibold text-ink">AGENTS.md</span> berisi brief, aturan kerja, cara terhubung, dan checklist.
-            Simpan di root repository agar agent langsung paham konteksnya.
+            <span className="font-semibold text-ink">AGENTS.md</span> berisi rencana, aturan kerja, cara terhubung, dan daftar periksa.
+            Simpan di folder utama proyekmu agar asisten langsung paham konteksnya.
           </div>
           <a className="btn btn-secondary btn-sm" href={`/api/projects/${pid}/export/agents-md`} download="AGENTS.md">
             <Download size={14} /> Unduh AGENTS.md

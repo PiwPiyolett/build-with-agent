@@ -1,7 +1,55 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Check, Copy, X } from "lucide-react";
 import type { TaskStatus } from "../../shared/types";
 import { cx, STATUS_META } from "../lib/format";
+
+// ---------- motion helpers ----------
+
+/** How long something stays on screen after it is told to close, matching the leaving animations in index.css. */
+const LEAVE_MS = 180;
+
+/** Keeps something rendered for a moment after it closes, so it can animate out instead of vanishing. */
+function usePresence(open: boolean) {
+  const [rendered, setRendered] = useState(open);
+  useEffect(() => {
+    if (open) {
+      setRendered(true);
+      return;
+    }
+    const t = setTimeout(() => setRendered(false), LEAVE_MS);
+    return () => clearTimeout(t);
+  }, [open]);
+  return { rendered: open || rendered, closing: !open && rendered };
+}
+
+/** Moves a white thumb under whichever child matches `selector`, sliding between them when `value` changes. */
+export function useSlidingThumb(box: RefObject<HTMLElement | null>, thumb: RefObject<HTMLElement | null>, selector: string, value: unknown) {
+  useLayoutEffect(() => {
+    const place = () => {
+      const target = box.current?.querySelector<HTMLElement>(selector);
+      const el = thumb.current;
+      if (!el) return;
+      el.style.opacity = target ? "1" : "0";
+      // Hidden for now, such as in a closed section: the observer below calls again once it shows.
+      if (!target?.offsetWidth) return;
+      // The first placement must not slide in from the corner, only later changes should.
+      const first = !el.style.width;
+      if (first) el.style.transition = "none";
+      el.style.width = `${target.offsetWidth}px`;
+      el.style.height = `${target.offsetHeight}px`;
+      el.style.transform = `translate(${target.offsetLeft}px, ${target.offsetTop}px)`;
+      if (first) {
+        void el.offsetWidth;
+        el.style.transition = "";
+      }
+    };
+    place();
+    void document.fonts.ready.then(place);
+    const observer = new ResizeObserver(place);
+    if (box.current) observer.observe(box.current);
+    return () => observer.disconnect();
+  }, [box, thumb, selector, value]);
+}
 
 // ---------- LEDs ----------
 
@@ -64,6 +112,7 @@ export function Modal({
   children,
   footer,
   width = "max-w-xl",
+  flush,
 }: {
   open: boolean;
   onClose: () => void;
@@ -72,40 +121,55 @@ export function Modal({
   children: ReactNode;
   footer?: ReactNode;
   width?: string;
+  /** the content lays out its own padding and scrolling, as Settings does for its side menu */
+  flush?: boolean;
 }) {
   const panel = useRef<HTMLDivElement>(null);
+  const { rendered, closing } = usePresence(open);
+  // While it animates out it keeps showing what it last showed, even if its owner has already cleared that.
+  const shown = useRef({ title, eyebrow, children, footer });
+  if (open) shown.current = { title, eyebrow, children, footer };
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
     const prev = document.activeElement as HTMLElement | null;
-    setTimeout(() => panel.current?.querySelector<HTMLElement>("input, textarea, select, button")?.focus(), 0);
+    // Start on the first visible field. Otherwise the dialog itself takes focus, so the close button is not lit up on opening.
+    setTimeout(() => {
+      const fields = panel.current?.querySelectorAll<HTMLElement>("input, textarea, select");
+      const first = [...(fields ?? [])].find((el) => el.offsetParent !== null);
+      (first ?? panel.current)?.focus();
+    }, 0);
     return () => {
       window.removeEventListener("keydown", onKey);
       prev?.focus?.();
     };
   }, [open, onClose]);
-  if (!open) return null;
+  if (!rendered) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/30 p-0 backdrop-blur-[1px] sm:items-center sm:p-4" onMouseDown={onClose}>
+    <div
+      className={cx("modal-backdrop fixed inset-0 z-50 flex items-end justify-center bg-ink/30 p-0 sm:items-center sm:p-4", closing && "is-leaving")}
+      onMouseDown={onClose}
+    >
       <div
         ref={panel}
         role="dialog"
         aria-modal="true"
-        className={cx("card rise-in flex max-h-[92dvh] w-full flex-col rounded-b-none shadow-2xl sm:rounded-b-xl", width)}
+        tabIndex={-1}
+        className={cx("modal-panel card flex max-h-[92dvh] w-full flex-col rounded-b-none shadow-2xl outline-none sm:rounded-b-[18px]", width, closing && "is-leaving")}
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4 border-b border-rule-2 px-5 pb-3 pt-4">
           <div>
-            {eyebrow && <div className="eyebrow mb-1">{eyebrow}</div>}
-            <h2 className="display text-[19px] leading-tight">{title}</h2>
+            {shown.current.eyebrow && <div className="eyebrow mb-1">{shown.current.eyebrow}</div>}
+            <h2 className="display text-[19px] leading-tight">{shown.current.title}</h2>
           </div>
           <button className="btn btn-ghost btn-sm btn-icon -mr-2" onClick={onClose} aria-label="Tutup">
             <X size={16} />
           </button>
         </div>
-        <div className="overflow-y-auto px-5 py-4">{children}</div>
-        {footer && <div className="flex justify-end gap-2 border-t border-rule-2 px-5 py-3">{footer}</div>}
+        <div className={flush ? "min-h-0" : "overflow-y-auto px-5 py-4"}>{shown.current.children}</div>
+        {shown.current.footer && <div className="flex justify-end gap-2 border-t border-rule-2 px-5 py-3">{shown.current.footer}</div>}
       </div>
     </div>
   );
@@ -166,6 +230,7 @@ interface Toast {
   id: number;
   text: string;
   tone: "info" | "error" | "success";
+  leaving?: boolean;
 }
 
 const ToastContext = createContext<(text: string, tone?: Toast["tone"]) => void>(() => {});
@@ -175,7 +240,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const push = useCallback((text: string, tone: Toast["tone"] = "info") => {
     const id = Date.now() + Math.random();
     setToasts((t) => [...t.slice(-3), { id, text, tone }]);
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), tone === "error" ? 7000 : 3500);
+    const stay = tone === "error" ? 7000 : 3500;
+    setTimeout(() => setToasts((t) => t.map((x) => (x.id === id ? { ...x, leaving: true } : x))), stay);
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), stay + LEAVE_MS);
   }, []);
   return (
     <ToastContext.Provider value={push}>
@@ -184,7 +251,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {toasts.map((t) => (
           <div
             key={t.id}
-            className="rise-in pointer-events-auto flex max-w-md items-center gap-2.5 rounded-lg bg-ink px-3.5 py-2.5 text-[13.5px] text-paper shadow-lg"
+            className={cx(
+              "toast pointer-events-auto flex max-w-md items-center gap-2.5 rounded-2xl bg-ink px-3.5 py-2.5 text-[13.5px] text-paper shadow-lg",
+              t.leaving && "is-leaving",
+            )}
           >
             <Led state={t.tone === "error" ? "red" : t.tone === "success" ? "green" : "amber"} />
             <span>{t.text}</span>
@@ -239,8 +309,12 @@ export function Segmented<T extends string>({
   onChange: (v: T) => void;
   label: string;
 }) {
+  const box = useRef<HTMLDivElement>(null);
+  const thumb = useRef<HTMLSpanElement>(null);
+  useSlidingThumb(box, thumb, 'button[aria-pressed="true"]', value);
   return (
-    <div className="seg" role="group" aria-label={label}>
+    <div ref={box} className="seg" role="group" aria-label={label}>
+      <span ref={thumb} className="seg-thumb" aria-hidden />
       {options.map((o) => (
         <button key={o.value} type="button" aria-pressed={o.value === value} title={o.title} onClick={() => onChange(o.value)}>
           {o.label}

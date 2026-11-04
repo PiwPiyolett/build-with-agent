@@ -44,6 +44,6 @@ export const HANDOVER_OPTIONS: { value: HandoverMode; label: string }[] = [
 ];
 
 export const HANDOVER_HINT: Record<HandoverMode, string> = {
-  wait: "Agent meringkas proyek di chat, lalu menunggu perintahmu sebelum menulis kode.",
-  auto: "Agent meringkas singkat, lalu langsung mengerjakan task satu per satu. Kamu tetap bisa menyela lewat chat.",
+  wait: "Asisten meringkas proyek di percakapan, lalu menunggu perintahmu sebelum menulis kode.",
+  auto: "Asisten meringkas singkat, lalu langsung mengerjakan task satu per satu. Kamu tetap bisa menyela lewat percakapan.",
 };

@@ -20,7 +20,7 @@ import {
   type BridgeInfo,
 } from "./context.ts";
 import { claudeStatus, codexStatus, connectClaude, connectCodex, disconnectClaude, disconnectCodex } from "./connect.ts";
-import { failJob, MAX_WAIT_SEC, pendingCount, queueHandover, standbyWorkers, submitJob, waitForJob } from "./brainQueue.ts";
+import { CONNECT_HINT, failJob, MAX_WAIT_SEC, pendingCount, queueHandover, standbyWorkers, submitJob, waitForJob } from "./brainQueue.ts";
 import { chat, diagnoseRouter, LlmError, listModels, normalizeBaseUrl } from "./llm.ts";
 import { brainLabel, getSettings, publicSettings, updateSettings, type SettingsPatch } from "./settings.ts";
 import {
@@ -99,7 +99,7 @@ app.onError((err, c) => {
 const sourceOf = (c: Context) => c.req.header("x-bwa-client") || "api";
 
 const HANDOVER_LABEL: Record<HandoverMode, string> = {
-  wait: "lapor lalu tunggu perintah di chat",
+  wait: "lapor lalu tunggu perintah di percakapan",
   auto: "langsung mengerjakan task",
 };
 
@@ -144,7 +144,7 @@ function agentStream(c: Context, agent: "idea" | "topology" | "tasks", work: (ru
         type: "status",
         message:
           getSettings().provider === "mcp"
-            ? "Mengirim job ke agent MCP (Claude Code, Codex)…"
+            ? "Mengirim permintaan ke asisten AI…"
             : `Menghubungi 9router · model ${brainLabel(agent) || "(belum dipilih)"}`,
       });
       const result = await work(run);
@@ -164,7 +164,7 @@ function agentStream(c: Context, agent: "idea" | "topology" | "tasks", work: (ru
 
 // ---------- health, settings, 9router ----------
 
-app.get("/api/health", (c) => c.json({ ok: true, name: "bwa", desktop: DESKTOP }));
+app.get("/api/health", (c) => c.json({ ok: true, name: "bwa", desktop: DESKTOP, platform: process.platform, arch: process.arch }));
 
 /** Desktop only: opens a console window running the 9router CLI. */
 app.post("/api/system/start-9router", (c) => {
@@ -266,10 +266,7 @@ app.get("/api/llm/status", async (c) => {
       pending: pendingCount(),
       ...(workers.length
         ? {}
-        : {
-            error: "Belum ada agent MCP yang standby.",
-            hint: "Di Claude Code yang terhubung ke MCP server bwa, jalankan /mcp__bwa__jadi_otak (Codex: kirim prompt jadi_otak). Biarkan sesinya terbuka.",
-          }),
+        : { error: "Asisten AI belum terhubung.", hint: CONNECT_HINT }),
     } satisfies RouterStatus);
   }
   try {
@@ -459,16 +456,16 @@ app.post("/api/projects/:id/agents/tasks/generate", async (c) => {
       p.stage = "tasks";
       pushActivity(p, "agent-3", `membagi pekerjaan menjadi ${plan.tasks.length} task dalam ${plan.phases.length} fase`);
       if (provider === "mcp") {
-        pushActivity(p, "agent-3", `menyerahkan proyek ke sesi agent MCP · ${HANDOVER_LABEL[handover]}`);
+        pushActivity(p, "agent-3", `menyerahkan proyek ke asisten AI · ${HANDOVER_LABEL[handover]}`);
       }
       return p;
     });
     if (provider === "mcp") {
-      run.onStatus("Menyerahkan proyek ke sesi agent MCP…");
+      run.onStatus("Menyerahkan proyek ke asisten AI…");
       queueHandover(id, handoverMarkdown(saved, handover), (worker) => {
         try {
           mutateProject(id, `agent:${worker}`, (p) => {
-            pushActivity(p, worker, `menerima serah-terima dan keluar dari mode otak · ${HANDOVER_LABEL[handover]}`);
+            pushActivity(p, worker, `siap mengerjakan proyek ini · ${HANDOVER_LABEL[handover]}`);
           });
         } catch {
           /* project deleted in the meantime */

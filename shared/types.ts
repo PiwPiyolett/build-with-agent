@@ -226,6 +226,15 @@ export interface AgentConnection {
   agent: "claude" | "codex";
   /** the agent (CLI or config folder) was found on this machine */
   found: boolean;
+  /** Claude only: the desktop app is installed, even if its copy of Claude Code is not there yet */
+  appFound?: boolean;
+  /** how the agent is installed: inside the desktop app, or as a terminal program */
+  via?: "app" | "cli";
+  /**
+   * true or false when the agent can tell; null when it cannot be known from outside.
+   * The Claude desktop app keeps its own login, so `claude auth status` says logged out even when it is signed in.
+   */
+  signedIn?: boolean | null;
   /** outdated = registered, but pointing at another BWA install or bridge path */
   state: "connected" | "outdated" | "disconnected";
   /** where BWA looked: the claude executable, or Codex's config.toml */
