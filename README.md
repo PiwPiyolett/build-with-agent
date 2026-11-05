@@ -4,6 +4,12 @@
 
 From a one-sentence idea to tasks that a coding agent builds and ticks off, or to a PRD you can share. This build is themed for SMK Telkom Purwokerto.
 
+**[Download the latest version](https://github.com/PiwPiyolett/build-with-agent/releases/latest)** for Windows, macOS, or Linux. BWA is free and runs on your own computer.
+
+![The BWA home page: the SMK Telkom Purwokerto building at the top, the title, and the box for writing an idea](docs/home.jpg)
+
+## What it does
+
 BWA runs three AI agents. Their brain is the coding agent you already use, **Claude Code or Codex**, connected over MCP and running on its own subscription or model, so you need no API key.
 
 1. **Agent 1 · Idea Developer**: turns a raw idea into directions and clickable choice groups (users, platform, features, stack, MVP scope), then sums your picks up as a project brief.
@@ -14,20 +20,9 @@ BWA runs three AI agents. Their brain is the coding agent you already use, **Cla
 
 > The app's interface is currently in Indonesian. The agents answer in the language of your idea.
 
-```
-Claude Code session, opened in your project folder → /bwa
-  │ Idea and Topology: you work in BWA; the session answers each step in the background
-  ▼
-"Split into tasks" → the tasks are ready
-  ▼
-Handover: the same session becomes the project's coding agent
-  ├─ "Wait for my instructions": it summarises the plan and asks "Start with T01?"
-  └─ "Start right away": it takes, builds, and ticks off the tasks one by one
-```
-
 ## Install
 
-Download the installer for your system from [Releases](https://github.com/PiwPiyolett/build-with-agent/releases):
+Download the installer for your system from the [latest release](https://github.com/PiwPiyolett/build-with-agent/releases/latest):
 
 | System | File | First launch |
 | --- | --- | --- |
@@ -37,7 +32,7 @@ Download the installer for your system from [Releases](https://github.com/PiwPiy
 
 Every build is started on Windows, macOS, and Linux in CI to check that the app launches and serves its UI. The macOS and Linux builds have not yet been tried on personal machines, so reports are welcome.
 
-The app keeps running in the tray when you close its window, so agents can keep answering and ticking off tasks. Your projects and settings live in the app's data folder (Windows `%APPDATA%\Build With Agent\data`, macOS `~/Library/Application Support/Build With Agent/data`, Linux `~/.config/Build With Agent/data`).
+The app keeps running in the tray (the menu bar on macOS) when you close its window, so agents can keep answering and ticking off tasks. Your projects and settings live in the app's data folder (Windows `%APPDATA%\Build With Agent\data`, macOS `~/Library/Application Support/Build With Agent/data`, Linux `~/.config/Build With Agent/data`).
 
 ## Connect Claude Code or Codex
 
@@ -63,6 +58,17 @@ The plugin adds `/bwa:start`. With BWA running, it registers the `bwa` MCP serve
 
 ## Use it
 
+```
+Claude Code session, opened in your project folder → /bwa
+  │ Idea and Topology: you work in BWA; the session answers each step in the background
+  ▼
+"Split into tasks" → the tasks are ready
+  ▼
+Handover: the same session becomes the project's coding agent
+  ├─ "Wait for my instructions": it summarises the plan and asks "Start with T01?"
+  └─ "Start right away": it takes, builds, and ticks off the tasks one by one
+```
+
 1. Open a **new** agent session in **your project's repository folder** (where the code will be written).
 2. Claude Code: type `/bwa` (or `/bwa:start` from the plugin). Codex: type `$bwa`.
 3. The light in BWA turns green ("Asisten AI siap · Claude"). Work through Idea and Topology in BWA; keep the session open. Close it when you finish, because even waiting uses a little of your plan.
@@ -75,7 +81,8 @@ The plugin adds `/bwa:start`. With BWA running, it registers the `bwa` MCP serve
 
 To continue a project later in a fresh session, type `/bwa task` (or `/bwa task p_xxxx`).
 
-Good to know:
+<details>
+<summary><b>Good to know</b></summary>
 
 - If no agent is standby for about 45 seconds, the run stops with instructions. Jobs live in memory and are dropped when BWA closes.
 - The Timeout setting limits how long an agent may take to answer one job after picking it up; time waiting in the queue does not count.
@@ -83,13 +90,23 @@ Good to know:
 - The agent's own model decides quality and speed. To switch models midway (for example Sonnet for ideas, Opus for topology and tasks): press Esc, run `/model`, then type `/bwa` or "continue". Jobs sent in the meantime wait in the queue for about two minutes.
 - In brain mode the session never touches your files. Code is written only after the handover.
 
-How it works: when you run an agent in the UI, BWA queues its prompt. The standby session long-polls `wait_for_brain_job` (about 100 seconds per call when connected through BWA, 40 when connected by hand), answers exactly as the job instructs, and returns it with `submit_brain_result`. BWA turns the answer into ideas, a topology, or tasks. Every empty answer costs one model turn, so a longer wait uses less of your plan.
+</details>
+
+<details>
+<summary><b>How it works</b></summary>
+
+When you run an agent in the UI, BWA queues its prompt. The standby session long-polls `wait_for_brain_job` (about 100 seconds per call when connected through BWA, 40 when connected by hand), answers exactly as the job instructs, and returns it with `submit_brain_result`. BWA turns the answer into ideas, a topology, or tasks. Every empty answer costs one model turn, so a longer wait uses less of your plan.
+
+</details>
 
 ## PRD path
 
 From the topology, click **Lanjut: pilih jalur** (Next: choose a path), then **Tulis PRD** (Write PRD). Agent 3 writes the strategy and the detailed requirements in parallel, and BWA assembles them with your edited topology into one document: summary, background, goals and constraints, success metrics, personas, platforms and architecture, data entities, feature scope per module (MoSCoW priorities, FR-xx requirements), integrations, dependencies, user stories with acceptance criteria, user flows, non-functional requirements, release plan, risks, open questions, and a glossary. Mermaid diagrams render as images on GitHub and Notion. Preview, edit (autosaved), copy, or download the `.md`.
 
-## Other coding agents
+## For developers
+
+<details>
+<summary><b>Other coding agents</b></summary>
 
 Agents that only build tasks (no brain mode) can connect from the Tasks page via **Hubungkan agent** (Connect agent), which gives ready-to-copy commands for Claude Code, Codex, Cursor, Gemini CLI, Windsurf, Cline, and Claude Desktop (all use the same `mcpServers` format).
 
@@ -97,7 +114,10 @@ MCP tools: `list_projects`, `get_project_context`, `get_prd`, `list_tasks`, `get
 
 Agents without MCP can use the CLI (`node bridge/cli.mjs help`) or the REST API under `/api/agent/projects/:id/…` (`context`, `prd`, `tasks`, `tasks/next`, `tasks/:taskId/claim`, `note`, `complete`, `block`, `release`).
 
-## Run from source
+</details>
+
+<details>
+<summary><b>Run from source</b></summary>
 
 Requires Node.js 22.6 or newer.
 
@@ -123,11 +143,17 @@ node --import tsx scripts/desktop-shell-test.mjs # the app menu and close dialog
 node scripts/launch-test.mjs          # start the packaged desktop app from release/ and check it
 ```
 
-## Optional: 9router
+</details>
+
+<details>
+<summary><b>Optional: 9router</b></summary>
 
 BWA can also use [9router](https://github.com/decolua/9router), an OpenAI-compatible API proxy, as the brain. It is hidden by default. Enable it with `BWA_ENABLE_9ROUTER=1` in `.env` (web) or `"enable9router": true` in the data folder's `settings.json` (desktop), then restart BWA. Settings then offers the choice of brain, with per-agent models. See `.env.example`.
 
-## Project structure
+</details>
+
+<details>
+<summary><b>Project structure</b></summary>
 
 ```
 server/app.ts          HTTP app (Hono): routes, agent bridge; server/index.ts starts it for the web version
@@ -146,6 +172,8 @@ src/                   React UI: home, Riwayat (projects), Bantuan (help), Idea,
 src/lib/brand.ts       the school's name, logo, picture, and quotes; the files are in public/brand/
 scripts/               desktop build, icons, tests
 ```
+
+</details>
 
 ## Security
 

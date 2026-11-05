@@ -4,6 +4,12 @@
 
 Dari satu kalimat ide ke task yang dikerjakan dan dicentang agent coding, atau ke PRD yang siap dibagikan. Versi ini bertema SMK Telkom Purwokerto.
 
+**[Unduh versi terbaru](https://github.com/PiwPiyolett/build-with-agent/releases/latest)** untuk Windows, macOS, atau Linux. BWA gratis dan berjalan di komputermu sendiri.
+
+![Halaman Utama BWA: gedung SMK Telkom Purwokerto di bagian atas, judul, dan kotak untuk menulis ide](docs/home.jpg)
+
+## Fungsinya
+
 BWA menjalankan tiga agent AI. Otaknya adalah agent coding yang sudah kamu pakai, yaitu **Claude Code atau Codex**, yang tersambung lewat MCP dan memakai langganan atau modelnya sendiri. Tidak perlu API key.
 
 1. **Agent 1 · Pengembang Ide**: mengubah ide mentah menjadi arah pengembangan dan kelompok pilihan yang bisa diklik (pengguna, platform, fitur, stack, cakupan MVP), lalu merangkum pilihanmu menjadi brief proyek.
@@ -12,20 +18,9 @@ BWA menjalankan tiga agent AI. Otaknya adalah agent coding yang sudah kamu pakai
    - **Kerjakan dengan agent coding**: Agent 3 membagi fitur menjadi task berurutan. Claude Code, Codex, Cursor, dan agent lain mengambilnya lewat MCP, mengerjakannya di repository-mu, lalu mencentangnya di BWA secara langsung.
    - **Jadikan PRD (.md)**: Product Requirements Document lengkap untuk tim, klien, dosen, atau investor.
 
-```
-Sesi Claude Code, dibuka di folder proyekmu → /bwa
-  │ Ide dan Topologi: kamu bekerja di BWA, sesi itu menjawab tiap langkah di latar
-  ▼
-"Bagi jadi task" → task terbentuk
-  ▼
-Serah-terima: sesi yang sama menjadi agent coding proyek itu
-  ├─ "Tunggu perintahku": meringkas rencana, lalu bertanya "Mulai dari T01?"
-  └─ "Langsung kerjakan": mengambil, mengerjakan, dan mencentang task satu per satu
-```
-
 ## Pasang
 
-Unduh installer untuk sistemmu dari [Releases](https://github.com/PiwPiyolett/build-with-agent/releases):
+Unduh installer untuk sistemmu dari [rilis terbaru](https://github.com/PiwPiyolett/build-with-agent/releases/latest):
 
 | Sistem | File | Saat pertama dibuka |
 | --- | --- | --- |
@@ -35,7 +30,7 @@ Unduh installer untuk sistemmu dari [Releases](https://github.com/PiwPiyolett/bu
 
 Setiap build dinyalakan di Windows, macOS, dan Linux di CI untuk memastikan aplikasinya berjalan dan menyajikan UI. Build macOS dan Linux belum dicoba di perangkat pribadi, jadi laporan sangat diterima.
 
-Aplikasi tetap berjalan di tray saat jendelanya ditutup, supaya agent tetap bisa menjawab dan mencentang task. Proyek dan pengaturan tersimpan di folder data aplikasi (Windows `%APPDATA%\Build With Agent\data`, macOS `~/Library/Application Support/Build With Agent/data`, Linux `~/.config/Build With Agent/data`).
+Aplikasi tetap berjalan di tray (menu bar di macOS) saat jendelanya ditutup, supaya agent tetap bisa menjawab dan mencentang task. Proyek dan pengaturan tersimpan di folder data aplikasi (Windows `%APPDATA%\Build With Agent\data`, macOS `~/Library/Application Support/Build With Agent/data`, Linux `~/.config/Build With Agent/data`).
 
 ## Sambungkan Claude Code atau Codex
 
@@ -61,6 +56,17 @@ Plugin ini menambahkan `/bwa:start`. Saat pertama kali dijalankan dan BWA sedang
 
 ## Cara pakai
 
+```
+Sesi Claude Code, dibuka di folder proyekmu → /bwa
+  │ Ide dan Topologi: kamu bekerja di BWA, sesi itu menjawab tiap langkah di latar
+  ▼
+"Bagi jadi task" → task terbentuk
+  ▼
+Serah-terima: sesi yang sama menjadi agent coding proyek itu
+  ├─ "Tunggu perintahku": meringkas rencana, lalu bertanya "Mulai dari T01?"
+  └─ "Langsung kerjakan": mengambil, mengerjakan, dan mencentang task satu per satu
+```
+
 1. Buka **sesi baru** agent di **folder repository proyekmu** (tempat kodenya akan ditulis).
 2. Claude Code: ketik `/bwa` (atau `/bwa:start` dari plugin). Codex: ketik `$bwa`.
 3. Lampu di BWA berubah hijau ("Asisten AI siap · Claude"). Kerjakan Ide dan Topologi di BWA, dan biarkan sesinya tetap terbuka. Kalau sudah selesai, tutup sesinya, karena selama menunggu pun ia memakai sedikit jatah langgananmu.
@@ -73,7 +79,8 @@ Plugin ini menambahkan `/bwa:start`. Saat pertama kali dijalankan dan BWA sedang
 
 Untuk melanjutkan proyek di sesi baru, ketik `/bwa task` (atau `/bwa task p_xxxx`).
 
-Perlu diketahui:
+<details>
+<summary><b>Perlu diketahui</b></summary>
 
 - Kalau tidak ada agent yang standby selama sekitar 45 detik, run berhenti dengan petunjuk. Job tersimpan di memori, jadi ikut hilang saat BWA ditutup.
 - Timeout di Pengaturan membatasi lama agent menjawab satu job setelah mengambilnya. Waktu menunggu di antrean tidak dihitung.
@@ -81,13 +88,23 @@ Perlu diketahui:
 - Kualitas dan kecepatan ditentukan model agent itu sendiri. Untuk ganti model di tengah jalan (misalnya Sonnet untuk ide, Opus untuk topologi dan task): tekan Esc, jalankan `/model`, lalu ketik `/bwa` atau "lanjut". Job yang masuk selama jeda menunggu di antrean sekitar dua menit.
 - Selama mode otak, sesi agent tidak menyentuh file. Kode baru ditulis setelah serah-terima.
 
-Cara kerjanya: setiap kali kamu menjalankan agent di UI, BWA menaruh prompt-nya di antrean. Sesi yang standby memanggil `wait_for_brain_job` (long-poll sekitar 100 detik kalau disambungkan lewat BWA, 40 detik kalau manual), menjawab persis sesuai instruksi job, lalu mengirimnya dengan `submit_brain_result`. BWA mengubah jawabannya menjadi ide, topologi, atau task. Tiap jawaban kosong memakai satu giliran model, jadi waktu tunggu yang lebih panjang lebih hemat jatah.
+</details>
+
+<details>
+<summary><b>Cara kerjanya</b></summary>
+
+Setiap kali kamu menjalankan agent di UI, BWA menaruh prompt-nya di antrean. Sesi yang standby memanggil `wait_for_brain_job` (long-poll sekitar 100 detik kalau disambungkan lewat BWA, 40 detik kalau manual), menjawab persis sesuai instruksi job, lalu mengirimnya dengan `submit_brain_result`. BWA mengubah jawabannya menjadi ide, topologi, atau task. Tiap jawaban kosong memakai satu giliran model, jadi waktu tunggu yang lebih panjang lebih hemat jatah.
+
+</details>
 
 ## Jalur PRD
 
 Dari topologi, klik **Lanjut: pilih jalur** lalu **Tulis PRD**. Agent 3 menulis strategi dan rincian kebutuhan secara paralel, lalu BWA menyusunnya bersama topologi yang sudah kamu edit menjadi satu dokumen: ringkasan, latar belakang, tujuan dan batasan, metrik keberhasilan, persona, platform dan arsitektur, entitas data, cakupan fitur per modul (prioritas MoSCoW, kebutuhan FR-xx), integrasi, dependensi, user story dengan kriteria penerimaan, alur pengguna, kebutuhan non-fungsional, rencana rilis, risiko, pertanyaan terbuka, dan glosarium. Diagram Mermaid tampil sebagai gambar di GitHub dan Notion. Kamu bisa melihat pratinjau, mengedit (tersimpan otomatis), menyalin, atau mengunduh `.md`-nya.
 
-## Agent coding lain
+## Untuk pengembang
+
+<details>
+<summary><b>Agent coding lain</b></summary>
 
 Agent yang hanya mengerjakan task (tanpa mode otak) bisa disambungkan dari halaman Task lewat **Hubungkan agent**, yang memberi perintah siap salin untuk Claude Code, Codex, Cursor, Gemini CLI, Windsurf, Cline, dan Claude Desktop (semuanya memakai format `mcpServers` yang sama).
 
@@ -95,7 +112,10 @@ Tool MCP: `list_projects`, `get_project_context`, `get_prd`, `list_tasks`, `get_
 
 Agent tanpa MCP bisa memakai CLI (`node bridge/cli.mjs help`) atau REST API di `/api/agent/projects/:id/…` (`context`, `prd`, `tasks`, `tasks/next`, `tasks/:taskId/claim`, `note`, `complete`, `block`, `release`).
 
-## Menjalankan dari kode sumber
+</details>
+
+<details>
+<summary><b>Menjalankan dari kode sumber</b></summary>
 
 Butuh Node.js 22.6 atau lebih baru.
 
@@ -121,11 +141,17 @@ node --import tsx scripts/desktop-shell-test.mjs # menu aplikasi dan pesan saat 
 node scripts/launch-test.mjs          # menyalakan aplikasi desktop hasil build dari release/ lalu memeriksanya
 ```
 
-## Opsional: 9router
+</details>
+
+<details>
+<summary><b>Opsional: 9router</b></summary>
 
 BWA juga bisa memakai [9router](https://github.com/decolua/9router), proxy API OpenAI-compatible, sebagai otak. Pilihan ini tersembunyi secara default. Aktifkan dengan `BWA_ENABLE_9ROUTER=1` di `.env` (web) atau `"enable9router": true` di `settings.json` folder data (desktop), lalu jalankan ulang BWA. Setelah itu Pengaturan menampilkan pilihan sumber otak, lengkap dengan model per agent. Lihat `.env.example`.
 
-## Struktur proyek
+</details>
+
+<details>
+<summary><b>Struktur proyek</b></summary>
 
 ```
 server/app.ts          aplikasi HTTP (Hono): rute, jembatan agent; server/index.ts menjalankannya untuk versi web
@@ -144,6 +170,8 @@ src/                   UI React: Halaman Utama, Riwayat, Bantuan, Ide, Topologi,
 src/lib/brand.ts       nama sekolah, logo, gambar, dan kutipan; filenya di public/brand/
 scripts/               build desktop, ikon, tes
 ```
+
+</details>
 
 ## Keamanan
 
