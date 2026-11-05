@@ -119,6 +119,7 @@ node scripts/brain-smoke-test.mjs     # the MCP brain, end to end
 node scripts/connect-smoke-test.mjs   # one-click connect (needs Claude Code installed; BWA_TEST_CODEX=1 also asks the real Codex CLI)
 node --import tsx scripts/setup-guide-test.mjs   # the step logic of the connect guide
 node --import tsx scripts/ui-logic-test.mjs      # page addresses, progress on Riwayat, where the red glow drifts
+node --import tsx scripts/desktop-shell-test.mjs # the app menu and close dialog on each operating system
 node scripts/launch-test.mjs          # start the packaged desktop app from release/ and check it
 ```
 
@@ -138,6 +139,7 @@ bridge/                MCP server (stdio) and CLI for coding agents
 plugins/bwa/           Claude Code plugin (/bwa:start); also installed as /bwa by the Connect button, and codex/ as $bwa
 .claude-plugin/        plugin marketplace for this repository
 electron/main.ts       desktop app: in-process server, window, tray
+electron/platform.ts   what differs per operating system: app menu, close dialog
 shared/types.ts        shared data model
 shared/setupGuide.ts   step logic of the connect guide; its wording is in src/lib/setupGuide.ts
 src/                   React UI: home, Riwayat (projects), Bantuan (help), Idea, Topology, Tasks, PRD

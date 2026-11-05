@@ -7,6 +7,7 @@ import { app, BrowserWindow, dialog, Menu, nativeImage, shell, Tray } from "elec
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { appMenuTemplate, closeDialogText } from "./platform";
 
 /** Folder of the source project this build was made from (for the one-time import of existing data). */
 declare const __BWA_SOURCE_DIR__: string;
@@ -203,11 +204,7 @@ async function onCloseRequested() {
     const res = await dialog.showMessageBox(win!, {
       type: "question",
       title: "Tutup BWA?",
-      message: "Biarkan BWA tetap berjalan di latar belakang?",
-      detail:
-        "Claude Code dan Codex hanya bisa menjawab job otak AI (mode MCP) serta mengambil dan mencentang task selama BWA berjalan. " +
-        "Kalau disembunyikan, BWA tetap ada di tray (pojok kanan bawah).",
-      buttons: ["Sembunyikan ke tray", "Keluar", "Batal"],
+      ...closeDialogText(process.platform),
       defaultId: 0,
       cancelId: 2,
       checkboxLabel: "Ingat pilihan ini",
@@ -291,36 +288,24 @@ function createTray() {
 
 function createMenu() {
   Menu.setApplicationMenu(
-    Menu.buildFromTemplate([
-      {
-        label: "BWA",
-        submenu: [
-          ...routerMenu(),
-          { label: "Buka folder data", click: () => void shell.openPath(dataDir) },
-          { type: "separator" },
-          { label: "Muat ulang", role: "reload" },
-          { label: "Developer tools", role: "toggleDevTools" },
-          { type: "separator" },
-          { label: "Keluar", accelerator: "Ctrl+Q", click: quitApp },
-        ],
-      },
-      {
-        label: "Tampilan",
-        submenu: [
-          { label: "Perbesar", role: "zoomIn" },
-          { label: "Perkecil", role: "zoomOut" },
-          { label: "Ukuran normal", role: "resetZoom" },
-          { type: "separator" },
-          { label: "Layar penuh", role: "togglefullscreen" },
-        ],
-      },
-    ]),
+    Menu.buildFromTemplate(
+      appMenuTemplate(process.platform, {
+        routerItems: routerMenu(),
+        openDataFolder: () => void shell.openPath(dataDir),
+        quit: quitApp,
+      }),
+    ),
   );
 }
 
 // ---------- lifecycle ----------
 
 app.on("second-instance", showWindow);
+// macOS: clicking the Dock icon or opening the app again. It can also fire during launch, before the
+// server is up; the tray is created once it is, and an app started with --hidden must stay hidden.
+app.on("activate", () => {
+  if (tray) showWindow();
+});
 app.on("before-quit", () => {
   quitting = true;
 });

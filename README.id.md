@@ -117,6 +117,7 @@ node scripts/brain-smoke-test.mjs     # otak MCP dari ujung ke ujung
 node scripts/connect-smoke-test.mjs   # sambungkan satu klik (butuh Claude Code terpasang; BWA_TEST_CODEX=1 juga memeriksa lewat Codex CLI sungguhan)
 node --import tsx scripts/setup-guide-test.mjs   # logika langkah panduan Hubungkan asisten AI
 node --import tsx scripts/ui-logic-test.mjs      # alamat halaman, progres di Riwayat, arah gerak pendaran merah
+node --import tsx scripts/desktop-shell-test.mjs # menu aplikasi dan pesan saat menutup jendela di tiap sistem operasi
 node scripts/launch-test.mjs          # menyalakan aplikasi desktop hasil build dari release/ lalu memeriksanya
 ```
 
@@ -136,6 +137,7 @@ bridge/                MCP server (stdio) dan CLI untuk agent coding
 plugins/bwa/           plugin Claude Code (/bwa:start); juga dipasang sebagai /bwa oleh tombol Hubungkan, dan codex/ sebagai $bwa
 .claude-plugin/        marketplace plugin untuk repository ini
 electron/main.ts       aplikasi desktop: server di dalam aplikasi, jendela, tray
+electron/platform.ts   yang berbeda di tiap sistem operasi: menu aplikasi, pesan saat menutup jendela
 shared/types.ts        model data bersama
 shared/setupGuide.ts   logika langkah panduan Hubungkan asisten AI; teksnya di src/lib/setupGuide.ts
 src/                   UI React: Halaman Utama, Riwayat, Bantuan, Ide, Topologi, Task, PRD
