@@ -160,6 +160,8 @@
     background: var(--color-paper);
     color: var(--color-ink);
     interpolate-size: allow-keywords;
+    /* The page still scrolls by wheel, trackpad and keyboard; only its bar is gone. Panels inside a page keep theirs. */
+    scrollbar-width: none;
   }
   /* Sections that fold open and shut, wherever they are in the app. */
   details::details-content {

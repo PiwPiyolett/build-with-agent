@@ -1,21 +1,23 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
-import { Bot, Palette, Settings, SlidersHorizontal, Workflow, type LucideIcon } from "lucide-react";
+import { Bot, Info, Palette, Settings, SlidersHorizontal, Workflow, type LucideIcon } from "lucide-react";
 import { agentLabel } from "../../shared/setupGuide";
 import type { AgentKey, BrainProvider, BrainWorker, HandoverMode, PublicSettings } from "../../shared/types";
 import { ROUTER_DASHBOARD, useApp } from "../App";
 import { api, type BridgeInfo, type ConnectionTest, type ModelTest } from "../lib/api";
+import { BRAND } from "../lib/brand";
 import { BRAIN_STARTER, HANDOVER_HINT, HANDOVER_OPTIONS, mcpConfigs } from "../lib/bridgeConfig";
 import { AGENTS, nf, timeAgo } from "../lib/format";
 import { ConnectAgents } from "./ConnectAgents";
 import { CodeBlock, CopyButton, ErrorNote, Led, Modal, Segmented, useSlidingThumb, useToast } from "./ui";
 
-type SectionKey = "assistant" | "behavior" | "appearance" | "advanced";
+type SectionKey = "assistant" | "behavior" | "appearance" | "advanced" | "about";
 
 const SECTIONS: { key: SectionKey; label: string; note: string; icon: LucideIcon }[] = [
   { key: "assistant", label: "Asisten AI", note: "Lihat asisten yang terhubung dan atur sambungannya.", icon: Bot },
   { key: "behavior", label: "Cara kerja", note: "Atur yang dilakukan asisten setelah task terbentuk.", icon: Workflow },
   { key: "appearance", label: "Tampilan", note: "Atur tampilan BWA di laptop ini.", icon: Palette },
   { key: "advanced", label: "Lanjutan", note: "Biasanya tidak perlu diubah.", icon: SlidersHorizontal },
+  { key: "about", label: "Tentang", note: "Orang-orang yang membuat BWA.", icon: Info },
 ];
 
 function SettingsNav({ sections, active, onPick }: { sections: typeof SECTIONS; active: SectionKey; onPick: (key: SectionKey) => void }) {
@@ -444,6 +446,17 @@ export function SettingsDialog({ open, onClose, onSaved }: { open: boolean; onCl
                 )}
               </div>
             </div>
+          </SettingsPanel>
+
+          <SettingsPanel section="about" active={active}>
+            <section className="space-y-2.5">
+              <h4 className="settings-label">Build by</h4>
+              <ul className="space-y-1.5 text-[14px] text-ink">
+                {BRAND.builders.map((name) => (
+                  <li key={name}>{name}</li>
+                ))}
+              </ul>
+            </section>
           </SettingsPanel>
           </div>
         </div>

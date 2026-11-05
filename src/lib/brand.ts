@@ -5,6 +5,8 @@ export const BRAND = {
   logo: "/brand/logo.png",
   hero: "/brand/gedung.webp",
   heroAlt: "Gedung SMK Telkom Purwokerto",
+  /** Listed in Settings, under Tentang. */
+  builders: ["Ariqo Banyusila Abrar", "Kenevan Fairuz Sava", "Satria Mahendra Kusuma"],
 };
 
 /** One is picked at random each time the home page opens. */
